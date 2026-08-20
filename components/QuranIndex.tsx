@@ -74,9 +74,9 @@ export function QuranIndex({ surahs, juz, hizb, manzil }: QuranIndexProps) {
             <Link
               key={s.number}
               href={`/quran/${s.number}`}
-              className="group flex items-center gap-4 rounded-2xl border border-ink/10 bg-surface p-4 transition hover:shadow-soft"
+              className="card-hover group flex items-center gap-4 rounded-2xl border border-ink/10 bg-surface p-4"
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ivory text-sm text-forest">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ivory text-sm font-semibold text-forest transition-colors group-hover:bg-forest group-hover:text-white">
                 {s.number}
               </span>
               <div className="min-w-0 flex-1">
@@ -85,7 +85,9 @@ export function QuranIndex({ surahs, juz, hizb, manzil }: QuranIndexProps) {
                   {s.translation} · {s.revelation} · {s.ayahs} Ayahs · Juz {s.juzStart}
                 </div>
               </div>
-              <span className="quran-arabic text-xl text-forest">{s.arabic}</span>
+              <span className="quran-arabic text-2xl text-forest transition-transform duration-300 group-hover:scale-110">
+                {s.arabic}
+              </span>
             </Link>
           ))}
           {query && filteredSurahs.length === 0 && (

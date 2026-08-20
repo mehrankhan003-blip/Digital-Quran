@@ -113,7 +113,7 @@ export default function AskPage() {
             <button
               key={s}
               onClick={() => ask(s)}
-              className="rounded-2xl border border-ink/10 bg-surface p-4 text-left text-sm text-ink/70 transition hover:border-gold/40 hover:bg-ivory hover:shadow-soft"
+              className="card-hover rounded-2xl border border-ink/10 bg-surface p-4 text-left text-sm text-ink/70 hover:border-gold/40 hover:bg-ivory"
             >
               {s}
             </button>

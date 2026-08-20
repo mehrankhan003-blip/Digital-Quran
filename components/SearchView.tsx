@@ -50,7 +50,7 @@ export function SearchView({ query: initialQuery, results }: SearchViewProps) {
           <Link
             key={r.key}
             href={`/quran/${r.surah}#ayah-${r.surah}-${r.ayah}`}
-            className="block rounded-2xl border border-ink/10 bg-surface p-5 transition hover:shadow-soft"
+            className="card-hover block rounded-2xl border border-ink/10 bg-surface p-5 hover:border-gold/30"
           >
             <div className="flex items-center justify-between text-xs text-ink/45">
               <span>

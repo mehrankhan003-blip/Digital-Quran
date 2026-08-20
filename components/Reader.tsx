@@ -168,6 +168,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
   }, [items]);
 
   const hasWords = !!words && Object.keys(words).length > 0;
+  const isUrduReciter = RECITERS.find((r) => r.id === reciter)?.urdu ?? false;
   const count = items.length;
   const current = items[index];
   const nameOf = (s: number) =>
@@ -275,7 +276,11 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
         return;
       }
       const item = items[index];
-      if (reciteMode === "arabic-urdu" && item?.u) {
+      if (
+        !isUrduReciter &&
+        reciteMode === "arabic-urdu" &&
+        item?.u
+      ) {
         const u = speakUrdu(item.u);
         if (u) {
           const spokenIndex = index;
@@ -301,7 +306,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
     };
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
-  }, [index, count, repeatMode, reciteMode, items]);
+  }, [index, count, repeatMode, reciteMode, items, isUrduReciter]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -479,17 +484,42 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
             <div className="flex items-center gap-2">
               <button
                 onClick={togglePlay}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-forest text-white transition hover:opacity-90"
+                className={`relative flex h-11 w-11 items-center justify-center rounded-full text-white shadow-card transition-all hover:scale-105 ${
+                  playing
+                    ? "bg-gradient-to-br from-gold to-gold/80"
+                    : "bg-gradient-to-br from-forest to-forest/80"
+                }`}
                 aria-label={playing ? "Pause" : "Play"}
               >
-                {playing ? <Pause size={17} /> : <Play size={17} />}
+                {playing ? <Pause size={18} /> : <Play size={18} className="translate-x-[1px]" />}
+                {playing && (
+                  <span className="eq eq-paused absolute -right-1.5 -top-1.5 rounded-md bg-surface px-1 py-0.5 text-gold shadow-sm">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                )}
               </button>
-              <div>
-                <div className="text-sm font-medium">Recitation</div>
+              <div className="flex min-w-0 flex-col">
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  {playing ? (
+                    <>
+                      <span className="eq text-forest">
+                        <span />
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      Reciting
+                    </>
+                  ) : (
+                    "Recitation"
+                  )}
+                </div>
                 <select
                   value={reciter}
                   onChange={(e) => setReciter(e.target.value)}
-                  className="rounded-md border border-ink/10 bg-surface px-1.5 py-0.5 text-xs text-ink/60"
+                  className="mt-0.5 max-w-[46vw] cursor-pointer rounded-lg border border-ink/10 bg-surface px-1.5 py-0.5 text-xs font-medium text-forest sm:max-w-[220px]"
                   aria-label="Reciter"
                 >
                   {RECITERS.map((r) => (
@@ -546,13 +576,14 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                 onClick={() =>
                   setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])
                 }
-                className={`rounded-xl p-2 transition hover:bg-surface ${
-                  speed !== 1 ? "text-gold" : "text-ink/55"
+                className={`flex items-center gap-1 rounded-xl px-2.5 py-2 text-xs font-semibold transition hover:bg-surface ${
+                  speed !== 1 ? "bg-gold/12 text-gold" : "text-ink/55"
                 }`}
                 aria-label="Playback speed"
+                title={`Speed ${speed}×`}
               >
-                <Gauge size={17} />
-                <span className="ml-0.5 text-[10px] font-semibold">{speed}×</span>
+                <Gauge size={16} />
+                {speed}×
               </button>
               <button
                 onClick={() => setAutoscroll(!autoscroll)}
@@ -625,7 +656,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                   reciteMode === "arabic-urdu"
                     ? "bg-gold text-white"
                     : "bg-surface text-ink/60 hover:bg-ivory"
-                }`}
+                } ${isUrduReciter ? "hidden" : ""}`}
                 title={
                   reciteMode === "arabic-urdu"
                     ? "Reciting Arabic then Urdu tarjuma"
@@ -636,6 +667,11 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                 <AudioLines size={14} />
                 {reciteMode === "arabic-urdu" ? "Arabic + Urdu" : "Arabic only"}
               </button>
+              {isUrduReciter && (
+                <span className="flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">
+                  <AudioLines size={14} /> Urdu tarjuma included
+                </span>
+              )}
             </div>
             <div className="text-xs text-ink/45">
               Ayah {index + 1} of {count}
@@ -678,17 +714,27 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                 onClick={() => playFrom(i)}
                 className={`cursor-pointer rounded-[1.75rem] border p-6 transition md:p-8 ${
                   active
-                    ? "ayah-active border-gold/60 bg-surface shadow-soft ring-1 ring-gold/30"
+                    ? "ayah-active border-gold/60 bg-gradient-to-br from-surface via-surface to-gold/[0.04] shadow-soft ring-1 ring-gold/30"
                     : "border-ink/10 bg-surface hover:border-gold/30"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs ${
-                      active ? "bg-gold text-white" : "bg-ivory text-forest"
+                    className={`relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold ${
+                      active
+                        ? "bg-gradient-to-br from-forest to-forest/80 text-white shadow-card"
+                        : "bg-ivory text-forest"
                     }`}
                   >
                     {a.n}
+                    {active && (
+                      <span className="eq absolute -right-2 -top-1.5 text-gold">
+                        <span />
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     {a.sajdah && (
@@ -764,14 +810,14 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                   </div>
                 )}
 
-                <div className="mt-6 space-y-4 border-t border-ink/5 pt-5">
+                <div className="mt-6 space-y-3 border-t border-ink/5 pt-5">
                   {showUrdu && (
                     <div
-                      className={`rounded-xl p-2 ${
-                        urduActive ? "urdu-speaking" : ""
+                      className={`rounded-xl p-3 ${
+                        urduActive ? "urdu-speaking" : "bg-ivory/40"
                       }`}
                     >
-                      <div className="text-xs font-semibold uppercase tracking-wider text-forest">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gold">
                         اردو ترجمہ
                       </div>
                       <p
@@ -783,16 +829,16 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                     </div>
                   )}
                   {showEnglish && (
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-wider text-forest">
+                    <div className="rounded-xl p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gold">
                         English
                       </div>
                       <p className="mt-1.5 leading-7 text-ink/65">{a.e}</p>
                     </div>
                   )}
                   {showRoman && (
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-wider text-forest">
+                    <div className="rounded-xl p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gold">
                         Roman Urdu
                       </div>
                       <p className="mt-1.5 leading-7 text-ink/65" dir="ltr">

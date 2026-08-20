@@ -493,7 +493,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
           return (
             <div key={`${a.s}-${a.n}`}>
               {newSurah && info && !focus && (
-                <div className="sticky top-40 z-30 flex items-center justify-between rounded-2xl border border-ink/10 bg-surface/90 px-4 py-2 shadow-sm backdrop-blur">
+                <div className="sticky top-[215px] z-30 flex items-center justify-between rounded-2xl border border-ink/10 bg-surface/90 px-4 py-2 shadow-sm backdrop-blur md:top-40">
                   <span className="text-sm font-semibold">
                     {info.english}{" "}
                     <span className="text-ink/40">· {info.ayahs} Ayahs</span>
@@ -637,7 +637,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
         <>
           <button
             onClick={() => setFocus(false)}
-            className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-forest text-white shadow-soft transition hover:opacity-90"
+            className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-forest text-white shadow-soft transition hover:opacity-90"
             aria-label="Exit focus mode"
             title="Exit focus mode"
           >

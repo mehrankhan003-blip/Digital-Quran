@@ -35,7 +35,7 @@ export default function HomePage() {
           <div className="rounded-[2rem] border border-ink/10 bg-surface p-8 shadow-soft md:p-10">
             <div className="text-center">
               <div className="text-sm uppercase tracking-[.25em] text-gold">Surah Al-Fatihah</div>
-              <div className="quran-arabic mt-7 text-5xl text-forest">ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَٰلَمِينَ</div>
+              <div className="quran-arabic mt-7 text-4xl leading-[1.9] text-forest md:text-5xl">ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَٰلَمِينَ</div>
               <p className="mt-6 text-sm leading-7 text-ink/55">All praise is for Allah — Lord of the worlds.</p>
               <div className="mt-8 flex justify-center gap-3 text-xs text-ink/45">
                 <span className="rounded-full bg-ivory px-3 py-1">Arabic</span>

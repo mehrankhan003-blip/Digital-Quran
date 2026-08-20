@@ -8,10 +8,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="app-header glass sticky top-0 z-50 border-b border-ink/5">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-8">
           <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-forest text-white">
+            <span className="hidden h-9 w-9 items-center justify-center rounded-xl bg-forest text-white min-[400px]:flex">
               <BookOpen size={18} />
             </span>
-            <span className="font-semibold tracking-tight">Digital Quran</span>
+            <span className="hidden font-semibold tracking-tight min-[400px]:inline">Digital Quran</span>
           </Link>
           <nav className="flex items-center gap-1">
             <Link href="/quran" className="rounded-xl px-3 py-2 text-sm text-ink/65 hover:bg-surface">

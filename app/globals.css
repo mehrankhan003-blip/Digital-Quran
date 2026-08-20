@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: "Inter";
+  --font-amiri: "Amiri";
+  --ink: 23 24 21;
+  --ivory: 248 245 237;
+  --forest: 23 63 53;
+  --gold: 181 138 69;
+  --mist: 233 229 217;
+  --surface: 255 255 255;
+}
+
+.dark {
+  --ink: 234 231 224;
+  --ivory: 15 16 15;
+  --forest: 96 176 152;
+  --gold: 210 178 112;
+  --mist: 40 41 38;
+  --surface: 26 27 25;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: rgb(var(--ivory));
+  color: rgb(var(--ink));
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+button, input, select { font: inherit; }
+
+.quran-arabic {
+  font-family: var(--font-amiri), serif;
+  line-height: 2.25;
+  direction: rtl;
+}
+
+.glass {
+  background: rgb(var(--ivory) / 0.78);
+  backdrop-filter: blur(18px);
+}
+
+body.noor-focus .app-header {
+  display: none;
+}
+
+body.noor-focus .app-footer {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition-duration: 0.01ms !important; }
+}

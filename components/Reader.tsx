@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  AudioLines,
   Bookmark as BookmarkIcon,
   BookmarkCheck,
   Brain,
@@ -25,12 +26,15 @@ import {
   ayahKey,
   getAllNotes,
   getBookmarks,
+  getHistory,
   setNote,
   toggleBookmark,
   type Bookmark,
 } from "@/lib/notes";
 
 export type TranslationMode = "arabic" | "urdu" | "roman" | "english" | "all";
+
+export type ReciteMode = "arabic" | "arabic-urdu";
 
 export type ReaderItem = {
   s: number;
@@ -81,6 +85,16 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
   const [hifz, setHifz] = useState(false);
   const [hifzIndex, setHifzIndex] = useState(-1);
   const [hifzRevealed, setHifzRevealed] = useState(0);
+  const [reciteMode, setReciteMode] = useState<ReciteMode>(() =>
+    getPref("recite", "arabic")
+  );
+  const [speakingUrdu, setSpeakingUrdu] = useState(false);
+  const [resumed, setResumed] = useState(false);
+  const playingRef = useRef(false);
+  const speechIdRef = useRef(0);
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
   const [bookmarks, setBookmarks] = useState<Record<string, Bookmark>>(() =>
     getBookmarks()
   );
@@ -94,6 +108,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
   useEffect(() => setPref("speed", speed), [speed]);
   useEffect(() => setPref("autoscroll", autoscroll), [autoscroll]);
   useEffect(() => setPref("focus", focus), [focus]);
+  useEffect(() => setPref("recite", reciteMode), [reciteMode]);
 
   useEffect(() => {
     const el = document.body;
@@ -107,12 +122,35 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
       const i = items.findIndex(
         (it) => it.s === Number(m[1]) && it.n === Number(m[2])
       );
-      if (i >= 0) {
-        setSeeded(true);
-        setIndex(i);
+      setSeeded(true);
+      if (i >= 0) setIndex(i);
+    } else {
+      const hist = getHistory();
+      if (hist.length > 0) {
+        const last = hist[0];
+        const i = items.findIndex((it) => it.s === last.s && it.n === last.n);
+        if (i >= 0) {
+          setIndex(i);
+          setResumed(true);
+        }
       }
+      setSeeded(true);
     }
   }
+
+  useEffect(() => {
+    if (!resumed) return;
+    if (typeof window === "undefined") return;
+    const a = items[index];
+    if (!a) return;
+    const t = window.setTimeout(() => setResumed(false), 6000);
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`ayah-${a.s}-${a.n}`)
+        ?.scrollIntoView({ behavior: "instant", block: "center" });
+    });
+    return () => window.clearTimeout(t);
+  }, [resumed, index, items]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -204,12 +242,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onEnded = () => {
-      if (repeatMode === "ayah") {
-        audio.currentTime = 0;
-        audio.play();
-        return;
-      }
+    const advance = () => {
       if (index >= count - 1) {
         if (repeatMode === "section") {
           setIndex(0);
@@ -220,9 +253,122 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
       }
       setIndex((i) => i + 1);
     };
+    const speakUrdu = (text: string): SpeechSynthesisUtterance | null => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window))
+        return null;
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ur-PK";
+      u.rate = 0.95;
+      const voices = synth.getVoices();
+      const urVoice = voices.find((v) =>
+        v.lang.toLowerCase().replace("_", "-").startsWith("ur")
+      );
+      if (urVoice) u.voice = urVoice;
+      return u;
+    };
+    const onEnded = () => {
+      if (repeatMode === "ayah") {
+        audio.currentTime = 0;
+        void audio.play();
+        return;
+      }
+      const item = items[index];
+      if (reciteMode === "arabic-urdu" && item?.u) {
+        const u = speakUrdu(item.u);
+        if (u) {
+          const spokenIndex = index;
+          const sid = speechIdRef.current;
+          const finish = () => {
+            setSpeakingUrdu(false);
+            if (
+              spokenIndex === index &&
+              playingRef.current &&
+              speechIdRef.current === sid
+            ) {
+              advance();
+            }
+          };
+          u.onend = finish;
+          u.onerror = finish;
+          window.speechSynthesis.speak(u);
+          setSpeakingUrdu(true);
+          return;
+        }
+      }
+      advance();
+    };
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
-  }, [index, count, repeatMode]);
+  }, [index, count, repeatMode, reciteMode, items]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!playing) {
+      speechIdRef.current++;
+      window.speechSynthesis?.cancel();
+    }
+  }, [playing]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    speechIdRef.current++;
+    window.speechSynthesis?.cancel();
+    const t = window.setTimeout(() => setSpeakingUrdu(false), 0);
+    return () => window.clearTimeout(t);
+  }, [index, reciteMode, reciter]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("IntersectionObserver" in window))
+      return;
+    let lastRecord = 0;
+    let pending: string | null = null;
+    let timer: number | null = null;
+    const flush = () => {
+      if (!pending) return;
+      const [s, n] = pending.split("-").map(Number);
+      const a = items.find((it) => it.s === s && it.n === n);
+      if (a) {
+        const meta = groupInfo?.find((g) => g.surah === a.s);
+        addHistory({
+          s: a.s,
+          n: a.n,
+          surahName: meta?.english ?? `Surah ${a.s}`,
+        });
+      }
+      pending = null;
+    };
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio > 0.5) {
+            pending = e.target.id.replace("ayah-", "");
+            const now = Date.now();
+            if (now - lastRecord > 2000) {
+              lastRecord = now;
+              flush();
+            } else if (timer === null) {
+              timer = window.setTimeout(() => {
+                timer = null;
+                lastRecord = Date.now();
+                flush();
+              }, 2000);
+            }
+          }
+        }
+      },
+      { rootMargin: "0px 0px -40% 0px" }
+    );
+    for (const it of items) {
+      const el = document.getElementById(`ayah-${it.s}-${it.n}`);
+      if (el) obs.observe(el);
+    }
+    return () => {
+      obs.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [items, groupInfo]);
 
   useEffect(() => {
     if (!autoscroll || !playing) return;
@@ -471,6 +617,25 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
               >
                 Word by Word
               </button>
+              <button
+                onClick={() =>
+                  setReciteMode(reciteMode === "arabic" ? "arabic-urdu" : "arabic")
+                }
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
+                  reciteMode === "arabic-urdu"
+                    ? "bg-gold text-white"
+                    : "bg-surface text-ink/60 hover:bg-ivory"
+                }`}
+                title={
+                  reciteMode === "arabic-urdu"
+                    ? "Reciting Arabic then Urdu tarjuma"
+                    : "Reciting Arabic only"
+                }
+                aria-label="Toggle Urdu recitation"
+              >
+                <AudioLines size={14} />
+                {reciteMode === "arabic-urdu" ? "Arabic + Urdu" : "Arabic only"}
+              </button>
             </div>
             <div className="text-xs text-ink/45">
               Ayah {index + 1} of {count}
@@ -481,11 +646,18 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
 
       <audio ref={audioRef} preload="auto" />
 
+      {resumed && !focus && (
+        <div className="fade-up fixed left-1/2 top-20 z-50 -translate-x-1/2 rounded-full border border-gold/40 bg-surface px-4 py-2 text-xs font-medium text-forest shadow-soft">
+          Resumed from Ayah {current.n} · {nameOf(current.s)}
+        </div>
+      )}
+
       <section className={`mt-6 space-y-5 ${focus ? "mt-10 md:mt-14" : ""}`}>
         {!focus && heading}
 
         {items.map((a, i) => {
-          const active = i === index && playing;
+          const active = i === index && (playing || speakingUrdu);
+          const urduActive = i === index && speakingUrdu;
           const newSurah = i === 0 || items[i - 1].s !== a.s;
           const info = groupInfo?.find((g) => g.surah === a.s);
           const bmKey = ayahKey(a.s, a.n);
@@ -506,7 +678,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                 onClick={() => playFrom(i)}
                 className={`cursor-pointer rounded-[1.75rem] border p-6 transition md:p-8 ${
                   active
-                    ? "border-gold/60 bg-surface shadow-soft ring-1 ring-gold/30"
+                    ? "ayah-active border-gold/60 bg-surface shadow-soft ring-1 ring-gold/30"
                     : "border-ink/10 bg-surface hover:border-gold/30"
                 }`}
               >
@@ -594,7 +766,11 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
 
                 <div className="mt-6 space-y-4 border-t border-ink/5 pt-5">
                   {showUrdu && (
-                    <div>
+                    <div
+                      className={`rounded-xl p-2 ${
+                        urduActive ? "urdu-speaking" : ""
+                      }`}
+                    >
                       <div className="text-xs font-semibold uppercase tracking-wider text-forest">
                         اردو ترجمہ
                       </div>

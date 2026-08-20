@@ -5,6 +5,7 @@ const KEY = {
   speed: "noor-speed",
   autoscroll: "noor-autoscroll",
   focus: "noor-focus",
+  recite: "noor-recite",
   khatmahMode: "noor-khatmah-mode",
   khatmahPages: "noor-khatmah-pages",
   khatmahTarget: "noor-khatmah-target",

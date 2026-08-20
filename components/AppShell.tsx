@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { BookOpen, CalendarDays, Search, Settings2 } from "lucide-react";
+import { BookOpen, CalendarDays, MessagesSquare, Search, Settings2 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { BottomNav } from "./BottomNav";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -14,16 +15,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="hidden font-semibold tracking-tight min-[400px]:inline">Digital Quran</span>
           </Link>
           <nav className="flex items-center gap-1">
-            <Link href="/quran" className="rounded-xl px-3 py-2 text-sm text-ink/65 hover:bg-surface">
+            <Link href="/quran" className="hidden rounded-xl px-3 py-2 text-sm text-ink/65 hover:bg-surface md:block">
               Quran
             </Link>
-            <Link href="/khatmah" aria-label="Khatmah planner" className="hidden rounded-xl p-2 text-ink/65 hover:bg-surface sm:block">
+            <Link href="/khatmah" aria-label="Khatmah planner" className="hidden rounded-xl p-2 text-ink/65 hover:bg-surface md:block">
               <CalendarDays size={18} />
             </Link>
-            <Link href="/search" aria-label="Search" className="rounded-xl p-2 text-ink/65 hover:bg-surface">
+            <Link href="/ask" aria-label="Ask AI" className="hidden rounded-xl p-2 text-ink/65 hover:bg-surface md:block">
+              <MessagesSquare size={18} />
+            </Link>
+            <Link href="/search" aria-label="Search" className="hidden rounded-xl p-2 text-ink/65 hover:bg-surface md:block">
               <Search size={18} />
             </Link>
-            <Link href="/settings" aria-label="Settings" className="rounded-xl p-2 text-ink/65 hover:bg-surface">
+            <Link href="/settings" aria-label="Settings" className="hidden rounded-xl p-2 text-ink/65 hover:bg-surface md:block">
               <Settings2 size={18} />
             </Link>
             <ThemeToggle />
@@ -36,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           Digital Quran · Read · Understand · Listen · Reflect
         </div>
       </footer>
+      <BottomNav />
     </>
   );
 }

@@ -42,6 +42,29 @@ and refuses to write unless all 6,236 ayahs validate with no blanks.
   `https://everyayah.com/data/{reciter}/{surah3}{ayah3}.mp3`
 - Reciter list in `lib/audio.ts` (Alafasy, Abdul Basit, Sudais, Minshawy, Husary,
   Abu Bakr Ash-Shaatree, Abdullah Matroud).
+- **Urdu tarjuma voice** — the "Arabic + Urdu" recite mode plays the Arabic MP3,
+  then reads the Urdu translation using the device's built-in speech synthesizer
+  (Web Speech API, `ur-PK` voice when available). No audio files ship; no network
+  dependency beyond the Arabic CDN.
+
+## Hadith data (in `data/hadith/`)
+
+| File | Content | Source | License |
+| --- | --- | --- | --- |
+| `bukhari.json` | Sahih al-Bukhari, 7,563 hadith (English) | fawazahmed0/hadith-api edition `eng-bukhari` | **Unlicense (public domain)** |
+| `muslim.json` | Sahih Muslim, 7,563 hadith (English) | fawazahmed0/hadith-api edition `eng-muslim` | **Unlicense (public domain)** |
+
+Fetched from the free, no-account CDN of
+[fawazahmed0/hadith-api](https://github.com/fawazahmed0/hadith-api)
+(released under the **Unlicense**):
+
+```bash
+node -e "const https=require('https');const fs=require('fs');const f=n=>https.get('https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/'+n+'.json',r=>{const d=[];r.on('data',c=>d.push(c));r.on('end',()=>fs.writeFileSync('data/hadith/'+n+'.json',Buffer.concat(d)))});f('eng-bukhari');f('eng-muslim');"
+```
+
+`lib/hadith.ts` builds an in-memory index (15k+ entries) and searches it by keyword with a
+Roman-Urdu → English synonym dictionary, so queries like "sabr" or "roza" work. Hadith are
+only ever used to *cite* real entries from the bundled dataset — never generated.
 
 ## Word-by-word data
 
@@ -63,8 +86,11 @@ from the data.
 | Feature | Provider | Env vars |
 | --- | --- | --- |
 | AI discovery (`/api/discover`) | Any OpenAI-compatible API | `AI_API_KEY`, optional `AI_BASE_URL`, `AI_MODEL` |
+| AI Q&A (`/api/ask`) | Any OpenAI-compatible API | same as above |
 | Cloud sync (planned) | Supabase | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
 
 Bounded AI rule: `/api/discover` only *ranks ayah references* that already exist
-in the canonical dataset. It never generates or modifies Quranic text, and the
-model never sees the text.
+in the canonical dataset, and `/api/ask` answers questions with citations from the
+canonical Quran dataset and the bundled hadith. Neither endpoint ever generates or
+modifies Quranic or hadith text, and every citation is re-validated before it is
+returned to the client.

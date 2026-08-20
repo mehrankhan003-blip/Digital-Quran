@@ -27,6 +27,10 @@ recitation — on every screen.
   complete **Abul Ala Maududi Roman Urdu** translation, switchable or shown all together.
 - **Word-by-word** — every word of every ayah with its English meaning and transliteration.
 - **Ayah-synchronised recitation** — 7 reciters, auto-scroll highlighting, repeat, speed.
+- **Arabic + Urdu recitation** — a recitation mode that recites each ayah's Arabic then reads the
+  Urdu tarjuma aloud, with a glowing highlight that follows the current ayah.
+- **AI Q&A grounded in real sources** — ask questions in your own words and get an answer with
+  citations from the Quran and Sahih Bukhari & Sahih Muslim hadith (nothing is ever invented).
 - **Built for learning & memorisation** — Hifz mode, Khatmah planner, bookmarks, notes, history.
 - **Private by design** — everything is stored on-device; optional manual backup/restore.
 - **Fast & installable** — fully static Quran (153 pre-rendered pages), ~110 kB first load, PWA.
@@ -43,12 +47,17 @@ recitation — on every screen.
 ### Listening
 - 7 reciters from the public `everyayah.com` CDN, ayah-by-ayah
 - Play / pause, next / previous, **repeat ayah**, **repeat section**, playback speed
+- **Recite: Arabic + Urdu** — plays the Arabic audio, then speaks the Urdu tarjuma with the
+  device's Urdu voice (Web Speech API), with a glowing highlight on the ayah being read
 - Current-ayah highlight + smooth auto-scroll while recitation plays
 
 ### Learning & personal journey
 - **Hifz (memorisation)** — tap to reveal one hidden word at a time, or reveal the whole ayah
 - **Khatmah planner** — daily page goal or target completion date, with today's pages one tap away
-- **Bookmarks, per-ayah notes and reading history** — your position is always remembered
+- **Bookmarks, per-ayah notes and reading history** — your position is always remembered, and the
+  reader **auto-resumes exactly where you left off** inside a surah
+- **AI Q&A** (`/ask`) — ask in your own words (e.g. "namaz ki ahmiyat") and get a cited answer
+  from the Quran and Sahih Bukhari / Sahih Muslim hadith (needs `AI_API_KEY`)
 - **Smart search** — Arabic (diacritic-insensitive), Urdu and English, plus a Roman→Arabic
   dictionary so `sabr`, `patience` and `صبر` all find the right ayahs
 - Deep links — `/quran/2#ayah-2-183` opens Al-Baqarah exactly at ayah 183
@@ -77,8 +86,31 @@ vercel          # preview deployment
 vercel --prod   # production deployment
 ```
 
-The app is fully static except the optional `/api/discover` endpoint. Nothing else needs
-environment variables — features simply stay disabled until you add them (see `docs/DATA_SOURCES.md`).
+The app is fully static except the optional `/api/discover` and `/api/ask` endpoints. Nothing
+else needs environment variables — features simply stay disabled until you add them
+(see `docs/DATA_SOURCES.md`).
+
+## 🤖 AI Q&A & discovery
+
+Both endpoints are **bounded** — they only search the bundled datasets and ask an LLM to rank
+or explain what was already found. The LLM can never invent or modify Quranic text, and every
+citation is re-validated against the canonical data before being returned.
+
+| Endpoint | Purpose | Requires |
+| --- | --- | --- |
+| `GET /api/discover?q=...` | Semantic discovery — grouped verses on a theme | `AI_API_KEY` |
+| `POST /api/ask` | Q&A with Quran + Hadith citations | `AI_API_KEY` |
+
+Any OpenAI-compatible provider works. For a **free** option:
+
+| Provider | `AI_BASE_URL` | `AI_MODEL` |
+| --- | --- | --- |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Google Gemini (free) | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `meta-llama/llama-3.3-70b-instruct:free` |
+
+Hadith data ships in the repo: **Sahih al-Bukhari** and **Sahih Muslim** (English,
+fawazahmed0/hadith-api — public domain, Unlicense).
 
 ## 🛠 Scripts & data pipeline
 
@@ -88,6 +120,7 @@ environment variables — features simply stay disabled until you add them (see 
 | `scripts/build-words-qurancom.mjs` | Word-by-word dataset (fast, resumable, Quran.com API) |
 | `scripts/build-words.mjs` | Alternative word-by-word builder (HuggingFace Quran-MD) |
 | `scripts/fetch-roman-urdu.mjs` | Abul Ala Maududi Roman Urdu (free CDN, public domain) |
+| `scripts/fetch-hadith.mjs` | Sahih Bukhari + Sahih Muslim (English, public domain) |
 
 Every script refuses to write incomplete or invalid data — the dataset can never silently
 shrink or corrupt.
@@ -109,6 +142,7 @@ docs/           DATA_SOURCES.md — provenance & licenses
 - Urdu: **Fateh Muhammad Jalandhry** (Tanzil) · English: **Saheeh International**
 - Roman Urdu: **Abul Ala Maududi** (public domain, fawazahmed0/quran-api — Unlicense)
 - Word-by-word: **Quran.com** corpus (83,665 words)
+- Hadith: **Sahih al-Bukhari** + **Sahih Muslim** (English, fawazahmed0/hadith-api — Unlicense)
 - Recitation: **everyayah.com** public CDN
 - Full provenance and licensing: [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md)
 
@@ -122,9 +156,12 @@ docs/           DATA_SOURCES.md — provenance & licenses
 6. ~~Focus / Mushaf mode~~
 7. ~~Word-by-word meanings~~
 8. ~~Roman Urdu translation (public domain)~~
-9. Auth + cross-device sync (Supabase — manual backup/restore shipped)
-10. Semantic discovery (`/api/discover` shipped; add your AI key)
-11. Accessibility, SEO & production QA
+9. ~~AI Q&A with Quran + Hadith citations (`/ask`, `/api/ask`)~~
+10. ~~Semantic discovery (`/api/discover` shipped; add your AI key)~~
+11. ~~Urdu recitation (Arabic + Urdu tarjuma voice) + active-ayah animation~~
+12. ~~Mobile-first polish: bottom navigation, resume where you left off~~
+13. Auth + cross-device sync (Supabase — manual backup/restore shipped)
+14. Accessibility, SEO & production QA
 
 ---
 

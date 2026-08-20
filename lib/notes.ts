@@ -100,3 +100,30 @@ export function clearHistory() {
 export function getLastRead(): HistoryEntry | undefined {
   return getHistory()[0];
 }
+
+export type Backup = {
+  version: 1;
+  exportedAt: number;
+  bookmarks: Record<string, Bookmark>;
+  notes: Record<string, string>;
+  history: HistoryEntry[];
+  prefs?: Record<string, unknown>;
+};
+
+export function exportBackup(): Backup {
+  return {
+    version: 1,
+    exportedAt: Date.now(),
+    bookmarks: getBookmarks(),
+    notes: getAllNotes(),
+    history: getHistory(),
+  };
+}
+
+export function importBackup(b: Backup): boolean {
+  if (!b || b.version !== 1) return false;
+  write(BOOKMARKS_KEY, b.bookmarks ?? {});
+  write(NOTES_KEY, b.notes ?? {});
+  write(HISTORY_KEY, Array.isArray(b.history) ? b.history : []);
+  return true;
+}

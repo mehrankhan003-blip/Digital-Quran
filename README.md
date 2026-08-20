@@ -26,8 +26,12 @@ translations and verse-accurate navigation across every screen.
   and full-juz reading views. Sajdah markers on every prostration ayah.
 - **Smart search** — Arabic (diacritic-insensitive), Urdu, English, plus a Roman→Arabic
   transliteration dictionary so `sabr`, `patience` and `صبر` all find relevant ayahs.
-- **Personal journey** — bookmarks, per-ayah notes, reading history and an automatic
-  "Continue reading" position, all stored on-device.
+- **Roman Urdu translation** — the full Abul Ala Maududi Roman Urdu translation
+  (public domain via fawazahmed0/quran-api, Unlicense) as a first-class reading lane.
+- **Word-by-word** — tap "Word by Word" in the reader to see every word of the current
+  ayah with its English meaning and transliteration (83,665 words from Quran.com).
+- **Personal journey** — bookmarks, per-ayah notes, reading history, an automatic
+  "Continue reading" position, and manual backup/restore, all stored on-device.
 - **Khatmah planner** — set a daily page goal or a target completion date; the plan is
   calculated for you and today's pages open exactly where to begin.
 - **Hifz (memorization) mode** — tap to reveal one hidden word at a time while the ayah
@@ -40,22 +44,20 @@ translations and verse-accurate navigation across every screen.
 
 ## Roman Urdu status
 
-Roman Urdu is a first-class lane in the UI and data model, but a complete, licensed,
-machine-readable **Roman Urdu translation dataset is not yet integrated** (the public
-canonical sources we evaluated are login-gated or absent). We will not fabricate
-translation text. The lane shows a "coming soon" placeholder until a licensed dataset
-(e.g. the Abul Ala Maududi Roman Urdu translation) is added. All translations in the app
-are clearly labelled and never mixed with the Arabic text.
+The full **Abul Ala Maududi Roman Urdu** translation is live in the app as a first-class
+lane (`data/quran/roman.json`, all 6,236 ayahs). It comes from the public-domain
+fawazahmed0/quran-api (Unlicense) — same source text used by QUL resource #281.
+See `docs/DATA_SOURCES.md` for regeneration and provenance.
 
 ## Data integrity
 
 - Arabic text is **never** typed by hand or generated. It comes from the canonical
   Uthmani edition (Tanzil distribution) and is validated at build time.
-- Surah/ayah counts, juz/hizb/manzil boundaries and sajdah markers are cross-checked
-  against a second independent dataset (`quran-data.js` gist by bayramarslan).
-- Sources: [AlQuran.cloud](https://alquran.cloud) (quran-uthmani · ur.jalandhry · en.sahih),
-  [everyayah.com](https://everyayah.com) (recitation audio). Attribution is kept in
-  `docs/DATA_SOURCES.md` as new sources are added.
+- Surah/ayah counts, juz/hizb/manzil boundaries, sajdah markers and the 83,665-word
+  word-by-word dataset are all cross-checked against independent sources.
+- Roman Urdu and all translations are verbatim from their sources (Unlicense / Tanzil /
+  AlQuran.cloud) and clearly labelled; they are never mixed with the Arabic text.
+- Sources and licenses are documented in `docs/DATA_SOURCES.md`.
 
 ## Run locally
 
@@ -80,7 +82,8 @@ node scripts/build-data.mjs
 4. ~~Khatmah planner + daily goals~~
 5. ~~Hifz (memorization) mode~~
 6. ~~Focus ("Quran without distraction") mode + Mushaf mode~~
-7. Roman Urdu translation (licensed dataset) + word-by-word meanings
-8. Auth + cross-device sync (optional accounts, guest mode stays complete)
-9. Semantic discovery (bounded AI, never touching Quranic text)
-10. Accessibility + SEO + full production QA
+7. ~~Word-by-word meanings (83,665 words, English + transliteration)~~
+8. ~~Roman Urdu translation (Abul Ala Maududi, public domain)~~
+9. Auth + cross-device sync (Supabase; manual backup/restore already shipped)
+10. Semantic discovery (bounded AI endpoint `/api/discover` shipped; add your key)
+11. Accessibility + SEO + full production QA

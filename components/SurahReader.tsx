@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Ayah, SurahMeta } from "@/lib/quran";
+import type { Word } from "@/lib/words";
 import { Reader, type ReaderItem } from "./Reader";
 
 type SurahReaderProps = {
@@ -10,9 +11,12 @@ type SurahReaderProps = {
   ayahs: (Ayah & { n: number })[];
   prevSurah?: SurahMeta;
   nextSurah?: SurahMeta;
+  words?: Record<string, Word[]>;
+  roman?: Record<string, string>;
+  hasRoman?: boolean;
 };
 
-export function SurahReader({ surah, ayahs, prevSurah, nextSurah }: SurahReaderProps) {
+export function SurahReader({ surah, ayahs, prevSurah, nextSurah, words, roman, hasRoman = false }: SurahReaderProps) {
   const items: ReaderItem[] = ayahs.map((a) => ({
     s: surah.number,
     n: a.n,
@@ -20,11 +24,14 @@ export function SurahReader({ surah, ayahs, prevSurah, nextSurah }: SurahReaderP
     u: a.u,
     e: a.e,
     sajdah: a.sajdah,
+    r: roman?.[a.n],
   }));
 
   return (
     <Reader
       items={items}
+      words={words}
+      hasRoman={hasRoman}
       heading={
         <header className="rounded-[2rem] border border-ink/10 bg-surface p-7 text-center shadow-soft md:p-10">
           <p className="text-sm uppercase tracking-[.25em] text-gold">

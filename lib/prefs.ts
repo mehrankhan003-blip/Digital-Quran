@@ -31,3 +31,20 @@ export function setPref<T>(key: PrefKey, value: T) {
 }
 
 export const PREF_KEYS = KEY;
+
+export function exportPrefs(): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(KEY) as PrefKey[]) {
+    const v = getPref(k, undefined);
+    if (v !== undefined && v !== null) out[k] = v;
+  }
+  return out;
+}
+
+export function importPrefs(data: Record<string, unknown>) {
+  for (const [k, v] of Object.entries(data)) {
+    if (k in KEY && v !== undefined && v !== null) {
+      setPref(k as PrefKey, v);
+    }
+  }
+}

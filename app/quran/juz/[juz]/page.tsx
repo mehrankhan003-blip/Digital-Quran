@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getJuzList, getSurah, getSurahAyahs } from "@/lib/quran";
+import { getWordsForRange, wordsAvailable } from "@/lib/words";
+import { getRomanUrdu, romanAvailable } from "@/lib/roman";
 import { Reader, type ReaderItem } from "@/components/Reader";
 
 export const dynamicParams = false;
@@ -27,6 +29,7 @@ export default async function JuzPage({ params }: { params: Promise<{ juz: strin
 
   const items: ReaderItem[] = [];
   const groupInfo: { surah: number; english: string; arabic: string; ayahs: number }[] = [];
+  const hasRoman = romanAvailable();
   for (let s = section.start.surah; s <= section.end.surah; s++) {
     const surah = getSurah(s);
     if (!surah) continue;
@@ -36,9 +39,14 @@ export default async function JuzPage({ params }: { params: Promise<{ juz: strin
     for (let n = startAyah; n <= endAyah; n++) {
       const a = getSurahAyahs(s)[n - 1];
       if (!a) continue;
-      items.push({ s, n: a.n, a: a.a, u: a.u, e: a.e, sajdah: a.sajdah });
+      const r = hasRoman ? getRomanUrdu(s, n) : undefined;
+      items.push({ s, n: a.n, a: a.a, u: a.u, e: a.e, sajdah: a.sajdah, r });
     }
   }
+
+  const words = wordsAvailable()
+    ? getWordsForRange(section)
+    : undefined;
 
   const startName = getSurah(section.start.surah)?.english ?? "";
   const endName = getSurah(section.end.surah)?.english ?? "";
@@ -48,6 +56,8 @@ export default async function JuzPage({ params }: { params: Promise<{ juz: strin
       <Reader
         items={items}
         groupInfo={groupInfo}
+        words={words}
+        hasRoman={hasRoman}
         heading={
           <header className="rounded-[2rem] border border-ink/10 bg-surface p-7 text-center shadow-soft md:p-10">
             <p className="text-sm uppercase tracking-[.25em] text-gold">The Quran</p>

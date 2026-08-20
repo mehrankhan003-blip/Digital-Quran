@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { audioUrl, RECITERS } from "@/lib/audio";
 import { getPref, setPref } from "@/lib/prefs";
+import type { Word } from "@/lib/words";
 import {
   addHistory,
   ayahKey,
@@ -38,6 +39,7 @@ export type ReaderItem = {
   u: string;
   e: string;
   sajdah: boolean;
+  r?: string;
 };
 
 const TRANSLATION_OPTIONS: { id: TranslationMode; label: string }[] = [
@@ -55,9 +57,11 @@ type ReaderProps = {
   heading?: React.ReactNode;
   footerNav?: React.ReactNode;
   groupInfo?: { surah: number; english: string; arabic: string; ayahs: number }[];
+  words?: Record<string, Word[]>;
+  hasRoman?: boolean;
 };
 
-export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
+export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman = false }: ReaderProps) {
   const [mode, setMode] = useState<TranslationMode>(() =>
     getPref("translation", "urdu")
   );
@@ -73,6 +77,7 @@ export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
     getPref("autoscroll", true)
   );
   const [focus, setFocus] = useState<boolean>(() => getPref("focus", false));
+  const [wbw, setWbw] = useState(false);
   const [hifz, setHifz] = useState(false);
   const [hifzIndex, setHifzIndex] = useState(-1);
   const [hifzRevealed, setHifzRevealed] = useState(0);
@@ -124,7 +129,7 @@ export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
     }
   }, [items]);
 
-  const hasRoman = false;
+  const hasWords = !!words && Object.keys(words).length > 0;
   const count = items.length;
   const current = items[index];
   const nameOf = (s: number) =>
@@ -232,6 +237,33 @@ export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
   const showEnglish = effMode === "english" || effMode === "all";
 
   const renderArabic = (a: ReaderItem, i: number) => {
+    const wbwWords = words?.[`${a.s}:${a.n}`];
+    const wbwReal = wbwWords?.filter((wd) => wd && wd.w && !/^\(\d+\)$/.test(wd.e ?? ""));
+    if (wbw && i === index && wbwReal && wbwReal.length > 0) {
+      return (
+        <div className="mt-6">
+          <div className="mb-3 text-xs text-ink/45">
+            Word by word · {wbwReal.length} words
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3" dir="rtl">
+            {wbwReal.map((wd, wi) => (
+              <div
+                key={wi}
+                className="rounded-xl border border-ink/10 bg-ivory/40 p-2.5 text-center"
+              >
+                <div className="quran-arabic text-xl leading-8 text-ink">{wd.w}</div>
+                <div className="mt-1 text-[11px] font-medium text-forest" dir="ltr">
+                  {wd.t}
+                </div>
+                <div className="mt-0.5 text-[11px] leading-4 text-ink/55" dir="ltr">
+                  {wd.e}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
     if (hifz && i === index) {
       const tokens = a.a.split(/\s+/);
       const revealedCount = hifzIndex === index ? hifzRevealed : 0;
@@ -408,7 +440,7 @@ export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
           </div>
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-ink/5 pt-2">
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {TRANSLATION_OPTIONS.map((opt) => {
                 const disabled = opt.id === "roman" && !hasRoman;
                 return (
@@ -427,6 +459,18 @@ export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
                   </button>
                 );
               })}
+              <button
+                onClick={() => setWbw(!wbw)}
+                disabled={!hasWords}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  wbw
+                    ? "bg-forest text-white"
+                    : "bg-surface text-ink/60 hover:bg-ivory"
+                } ${!hasWords ? "cursor-not-allowed opacity-40" : ""}`}
+                title={hasWords ? "Word by word meanings (English)" : "Word-by-word data not available"}
+              >
+                Word by Word
+              </button>
             </div>
             <div className="text-xs text-ink/45">
               Ayah {index + 1} of {count}
@@ -575,8 +619,8 @@ export function Reader({ items, heading, footerNav, groupInfo }: ReaderProps) {
                       <div className="text-xs font-semibold uppercase tracking-wider text-forest">
                         Roman Urdu
                       </div>
-                      <p className="mt-1.5 italic leading-7 text-ink/65">
-                        Roman Urdu translation coming soon.
+                      <p className="mt-1.5 leading-7 text-ink/65" dir="ltr">
+                        {a.r ?? "Roman Urdu translation coming soon."}
                       </p>
                     </div>
                   )}

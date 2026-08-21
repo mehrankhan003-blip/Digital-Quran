@@ -27,10 +27,10 @@ export function SearchView({ query: initialQuery, results }: SearchViewProps) {
   const searching = deferred.trim() !== initialQuery.trim() || (deferred.trim() && results.length === 0);
 
   return (
-    <main className="mx-auto max-w-4xl px-5 py-12 md:px-8">
-      <p className="text-sm uppercase tracking-[.2em] text-gold">Discovery</p>
-      <h1 className="mt-2 text-4xl font-semibold">Search the Quran</h1>
-      <div className="mt-8 flex items-center gap-3 rounded-2xl border border-ink/10 bg-surface px-4 py-3 shadow-sm">
+    <main className="mx-auto max-w-4xl px-4 py-8 sm:px-5 md:px-8 md:py-12">
+      <p className="text-xs uppercase tracking-[.2em] text-gold sm:text-sm">Discovery</p>
+      <h1 className="mt-1.5 text-3xl font-semibold sm:mt-2 sm:text-4xl">Search the Quran</h1>
+      <div className="mt-6 flex items-center gap-3 rounded-2xl border border-ink/10 bg-surface px-4 py-3 shadow-sm sm:mt-8">
         <Search size={19} className="text-ink/35" />
         <input
           value={query}

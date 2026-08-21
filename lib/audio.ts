@@ -15,9 +15,13 @@ export function globalAyahNumber(surah: number, ayah: number): number {
   return n;
 }
 
+// The Urdu tarjuma recitation (Shamshad Ali Khan) — the beloved voice heard
+// in every Arabic+Urdu video. Served per-ayah from the islamic.network CDN.
+export const URDU_RECITER_ID = "ur.khan";
+export const DEFAULT_ARABIC_RECITER = "Alafasy_128kbps";
+
 export const RECITERS = [
   { id: "Alafasy_128kbps", name: "Mishary Alafasy", urdu: false },
-  { id: "ur.khan", name: "Shamshad Ali Khan (Arabic + Urdu)", urdu: true },
   { id: "Abdul_Basit_Murattal_192kbps", name: "Abdul Basit", urdu: false },
   { id: "Abdurrahmaan_As-Sudais_192kbps", name: "Abdur-Rahman As-Sudais", urdu: false },
   { id: "Minshawy_Murattal_128kbps", name: "Mohammad Al-Minshawi", urdu: false },
@@ -28,12 +32,34 @@ export const RECITERS = [
 
 export type ReciterId = (typeof RECITERS)[number]["id"];
 
-export function audioUrl(reciter: string, surah: number, ayah: number): string {
-  if (reciter === "ur.khan") {
-    const n = globalAyahNumber(surah, ayah);
-    return `https://cdn.islamic.network/quran/audio/64/ur.khan/${n}.mp3`;
-  }
+export function isUrduReciter(id: string): boolean {
+  return id === URDU_RECITER_ID;
+}
+
+export function reciterName(id: string): string {
+  if (id === URDU_RECITER_ID) return "Shamshad Ali Khan (Urdu Tarjuma)";
+  return RECITERS.find((r) => r.id === id)?.name ?? id;
+}
+
+/** Arabic recitation audio for one ayah (everyayah.com). */
+export function arabicAudioUrl(reciter: string, surah: number, ayah: number): string {
   const s = String(surah).padStart(3, "0");
   const a = String(ayah).padStart(3, "0");
   return `https://everyayah.com/data/${reciter}/${s}${a}.mp3`;
+}
+
+/** Urdu tarjuma audio for one ayah (Shamshad Ali Khan, islamic.network CDN). */
+export function urduAudioUrl(surah: number, ayah: number): string {
+  const n = globalAyahNumber(surah, ayah);
+  return `https://cdn.islamic.network/quran/audio/64/ur.khan/${n}.mp3`;
+}
+
+/**
+ * Legacy single-source URL. Kept for compatibility:
+ * - ur.khan  → Urdu-only audio
+ * - anything else → Arabic audio
+ */
+export function audioUrl(reciter: string, surah: number, ayah: number): string {
+  if (reciter === URDU_RECITER_ID) return urduAudioUrl(surah, ayah);
+  return arabicAudioUrl(reciter, surah, ayah);
 }

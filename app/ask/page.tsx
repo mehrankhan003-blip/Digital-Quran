@@ -93,7 +93,7 @@ export default function AskPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-5 pb-32 pt-10 md:px-8">
+    <main className="mx-auto max-w-3xl px-4 pb-36 pt-8 sm:px-5 md:px-8 md:pb-32 md:pt-10">
       <header className="mb-6 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-surface/60 px-4 py-2 text-sm text-forest">
           <Sparkles size={16} /> Ask · Quran & Hadith
@@ -167,7 +167,7 @@ export default function AskPage() {
           e.preventDefault();
           ask(input);
         }}
-        className="glass fixed inset-x-0 bottom-16 z-40 border-t border-ink/10 p-3 md:bottom-0 md:border-0 md:bg-transparent md:backdrop-blur-none md:pt-0"
+        className="glass fixed inset-x-0 bottom-[calc(3.9rem+env(safe-area-inset-bottom))] z-40 border-t border-ink/10 p-3 md:bottom-0 md:border-0 md:bg-transparent md:backdrop-blur-none md:pt-0"
       >
         <div className="mx-auto flex max-w-3xl items-center gap-2">
           <input

@@ -19,8 +19,8 @@ export function HomeWidgets() {
   const noteCount = Object.keys(getAllNotes()).length;
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-4 px-5 py-10 md:grid-cols-3 md:px-8">
-      <div className="rounded-2xl border border-ink/10 bg-surface p-6">
+    <div className="mx-auto grid max-w-7xl gap-3 px-4 py-8 sm:px-5 md:grid-cols-3 md:gap-4 md:px-8 md:py-10">
+      <div className="rounded-2xl border border-ink/10 bg-surface p-5 sm:p-6">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
           <Clock3 size={16} className="text-gold" /> Continue reading
         </div>
@@ -42,7 +42,7 @@ export function HomeWidgets() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-ink/10 bg-surface p-6">
+      <div className="rounded-2xl border border-ink/10 bg-surface p-5 sm:p-6">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
           <BookMarked size={16} className="text-gold" /> Bookmarks
           {bookmarks.length > 0 && (
@@ -79,7 +79,7 @@ export function HomeWidgets() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-ink/10 bg-surface p-6">
+      <div className="rounded-2xl border border-ink/10 bg-surface p-5 sm:p-6">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
           <StickyNote size={16} className="text-gold" /> Notes & history
         </div>

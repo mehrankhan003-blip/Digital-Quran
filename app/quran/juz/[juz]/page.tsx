@@ -52,17 +52,17 @@ export default async function JuzPage({ params }: { params: Promise<{ juz: strin
   const endName = getSurah(section.end.surah)?.english ?? "";
 
   return (
-    <main className="mx-auto max-w-4xl px-5 py-10 md:px-8">
+    <main className="mx-auto max-w-4xl px-3 py-6 sm:px-5 md:px-8 md:py-10">
       <Reader
         items={items}
         groupInfo={groupInfo}
         words={words}
         hasRoman={hasRoman}
         heading={
-          <header className="rounded-[2rem] border border-ink/10 bg-surface p-7 text-center shadow-soft md:p-10">
-            <p className="text-sm uppercase tracking-[.25em] text-gold">The Quran</p>
-            <h1 className="mt-2 text-4xl font-semibold">Juz {id}</h1>
-            <p className="mt-2 text-ink/55">
+          <header className="rounded-[1.75rem] border border-ink/10 bg-surface p-5 text-center shadow-soft sm:p-7 md:rounded-[2rem] md:p-10">
+            <p className="text-xs uppercase tracking-[.22em] text-gold sm:text-sm sm:tracking-[.25em]">The Quran</p>
+            <h1 className="mt-1.5 text-3xl font-semibold sm:mt-2 sm:text-4xl">Juz {id}</h1>
+            <p className="mt-1.5 text-sm text-ink/55 sm:mt-2 sm:text-base">
               {startName} {section.start.ayah} → {endName} {section.end.ayah} · {section.ayahs} Ayahs
             </p>
           </header>

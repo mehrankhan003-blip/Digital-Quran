@@ -5,7 +5,7 @@ import { CloudUpload, Database, Download, Upload } from "lucide-react";
 import { RECITERS } from "@/lib/audio";
 import { getPref, setPref, exportPrefs, importPrefs } from "@/lib/prefs";
 import { exportBackup, importBackup, type Backup } from "@/lib/notes";
-import type { TranslationMode } from "./Reader";
+import type { TranslationMode, ReciteMode } from "./Reader";
 
 const TRANSLATIONS: { id: TranslationMode; label: string; note: string }[] = [
   { id: "arabic", label: "Arabic only", note: "Show the Arabic text without translations" },
@@ -15,11 +15,24 @@ const TRANSLATIONS: { id: TranslationMode; label: string; note: string }[] = [
   { id: "all", label: "Show All", note: "Arabic, Urdu, Roman Urdu and English together" },
 ];
 
+const RECITE_MODES: { id: ReciteMode; label: string; note: string }[] = [
+  { id: "arabic", label: "Arabic only", note: "Sirf Arabic tilawat chalegi" },
+  { id: "arabic-urdu", label: "Arabic + Urdu", note: "Har ayah ki tilawat ke baad Shamshad Ali Khan ka Urdu tarjuma — dono par word-by-word animation" },
+  { id: "urdu", label: "Urdu only", note: "Sirf Urdu tarjuma (Shamshad Ali Khan) chalega" },
+];
+
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 
 export function SettingsView() {
   const [translation, setTranslation] = useState<TranslationMode>(() => getPref("translation", "urdu"));
-  const [reciter, setReciter] = useState<string>(() => getPref("reciter", RECITERS[0].id));
+  const [reciter, setReciter] = useState<string>(() => {
+    const r: string = getPref("reciter", RECITERS[0].id);
+    return r === "ur.khan" ? RECITERS[0].id : r;
+  });
+  const [recite, setRecite] = useState<ReciteMode>(() => {
+    const saved = getPref<ReciteMode>("recite", "arabic-urdu");
+    return saved === "arabic" || saved === "urdu" || saved === "arabic-urdu" ? saved : "arabic-urdu";
+  });
   const [speed, setSpeed] = useState(() => getPref("speed", 1));
   const [autoscroll, setAutoscroll] = useState(() => getPref("autoscroll", true));
   const [syncMsg, setSyncMsg] = useState("");
@@ -27,6 +40,7 @@ export function SettingsView() {
 
   useEffect(() => setPref("translation", translation), [translation]);
   useEffect(() => setPref("reciter", reciter), [reciter]);
+  useEffect(() => setPref("recite", recite), [recite]);
   useEffect(() => setPref("speed", speed), [speed]);
   useEffect(() => setPref("autoscroll", autoscroll), [autoscroll]);
 
@@ -51,6 +65,7 @@ export function SettingsView() {
           importPrefs(data.prefs ?? {});
           setTranslation(getPref("translation", "urdu"));
           setReciter(getPref("reciter", RECITERS[0].id));
+          setRecite(getPref("recite", "arabic-urdu"));
           setSpeed(getPref("speed", 1));
           setAutoscroll(getPref("autoscroll", true));
           setSyncMsg("Backup restored successfully.");
@@ -65,15 +80,39 @@ export function SettingsView() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-12 md:px-8">
-      <p className="text-sm uppercase tracking-[.2em] text-gold">Preferences</p>
-      <h1 className="mt-2 text-4xl font-semibold">Reading settings</h1>
-      <p className="mt-3 text-ink/55">
+    <main className="mx-auto max-w-3xl px-4 py-8 sm:px-5 md:px-8 md:py-12">
+      <p className="text-xs uppercase tracking-[.2em] text-gold sm:text-sm">Preferences</p>
+      <h1 className="mt-1.5 text-3xl font-semibold sm:mt-2 sm:text-4xl">Reading settings</h1>
+      <p className="mt-2 text-sm text-ink/55 sm:mt-3 sm:text-base">
         Saved on this device and applied automatically when you open the Quran.
       </p>
 
-      <section className="mt-8 divide-y divide-ink/5 overflow-hidden rounded-2xl border border-ink/10 bg-surface">
-        <div className="p-5">
+      <section className="mt-6 divide-y divide-ink/5 overflow-hidden rounded-2xl border border-ink/10 bg-surface sm:mt-8">
+        <div className="p-4 sm:p-5">
+          <div className="text-sm font-semibold">Recitation mode</div>
+          <p className="mt-1 text-xs text-ink/45">
+            Arabic + Urdu: har ayah ke baad Urdu tarjuma audio mein chalta hai.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {RECITE_MODES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setRecite(t.id)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  recite === t.id ? "bg-forest text-white" : "bg-ivory text-ink/60 hover:bg-mist"
+                }`}
+                title={t.note}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-ink/45">
+            {RECITE_MODES.find((m) => m.id === recite)?.note}
+          </p>
+        </div>
+
+        <div className="p-4 sm:p-5">
           <div className="text-sm font-semibold">Translation</div>
           <p className="mt-1 text-xs text-ink/45">Default layers shown under each ayah.</p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -92,13 +131,15 @@ export function SettingsView() {
           </div>
         </div>
 
-        <div className="p-5">
-          <div className="text-sm font-semibold">Default reciter</div>
-          <p className="mt-1 text-xs text-ink/45">Recitation plays ayah by ayah from the chosen reciter.</p>
+        <div className="p-4 sm:p-5">
+          <div className="text-sm font-semibold">Arabic reciter</div>
+          <p className="mt-1 text-xs text-ink/45">
+            Tilawat ayah-by-ayah chalti hai. Urdu tarjuma hamesha Shamshad Ali Khan ki awaaz mein hota hai.
+          </p>
           <select
             value={reciter}
             onChange={(e) => setReciter(e.target.value)}
-            className="mt-3 w-full rounded-xl border border-ink/10 bg-surface px-3 py-2 text-sm"
+            className="mt-3 w-full rounded-xl border border-ink/10 bg-surface px-3 py-2.5 text-sm"
           >
             {RECITERS.map((r) => (
               <option key={r.id} value={r.id}>
@@ -108,7 +149,7 @@ export function SettingsView() {
           </select>
         </div>
 
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <div className="text-sm font-semibold">Playback speed</div>
           <div className="mt-3 flex flex-wrap gap-2">
             {SPEEDS.map((s) => (
@@ -125,7 +166,7 @@ export function SettingsView() {
           </div>
         </div>
 
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <label className="flex items-center justify-between gap-4">
             <span>
               <span className="text-sm font-semibold">Auto-scroll</span>
@@ -135,7 +176,7 @@ export function SettingsView() {
               onClick={() => setAutoscroll(!autoscroll)}
               role="switch"
               aria-checked={autoscroll}
-              className={`relative h-6 w-11 rounded-full transition ${autoscroll ? "bg-forest" : "bg-ink/20"}`}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition ${autoscroll ? "bg-forest" : "bg-ink/20"}`}
             >
               <span
                 className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${autoscroll ? "left-[22px]" : "left-0.5"}`}
@@ -145,8 +186,8 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="mt-6 divide-y divide-ink/5 overflow-hidden rounded-2xl border border-ink/10 bg-surface">
-        <div className="flex items-center gap-3 p-5">
+      <section className="mt-5 divide-y divide-ink/5 overflow-hidden rounded-2xl border border-ink/10 bg-surface sm:mt-6">
+        <div className="flex items-center gap-3 p-4 sm:p-5">
           <Database size={18} className="shrink-0 text-gold" />
           <div>
             <div className="text-sm font-semibold">Data & sync</div>
@@ -155,7 +196,7 @@ export function SettingsView() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 p-5">
+        <div className="flex flex-wrap items-center gap-3 p-4 sm:p-5">
           <button
             onClick={onExport}
             className="inline-flex items-center gap-2 rounded-full bg-forest px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
@@ -181,7 +222,7 @@ export function SettingsView() {
           />
           {syncMsg && <span className="text-xs text-forest">{syncMsg}</span>}
         </div>
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <div className="flex items-center gap-3">
             <CloudUpload size={18} className="shrink-0 text-ink/40" />
             <div>

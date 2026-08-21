@@ -10,15 +10,24 @@ type KhatmahPrefs = {
   mode: "pages" | "date";
   pagesPerDay: number;
   targetDate: string;
+  startDate: string; // ISO date (yyyy-mm-dd) the plan began
 };
 
 const TOTAL_PAGES = 604;
+
+function todayISO(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
 function readPrefs(): KhatmahPrefs {
   return {
     mode: getPref("khatmahMode", "pages") as KhatmahPrefs["mode"],
     pagesPerDay: getPref("khatmahPages", 4),
     targetDate: getPref("khatmahTarget", ""),
+    startDate: getPref("khatmahStart", "") || todayISO(),
   };
 }
 
@@ -40,7 +49,8 @@ export function KhatmahView({ pageStarts }: { pageStarts: PageStart[] }) {
   if (!ready) return null;
 
   const now = startOfToday();
-  const dayIndex = Math.floor((now - startOfToday()) / 86400000) + 1;
+  const planStart = new Date(prefs.startDate + "T00:00:00").getTime();
+  const dayIndex = Math.max(1, daysBetween(planStart, now) + 1);
 
   let dailyPages = prefs.pagesPerDay;
   let remaining = 0;
@@ -63,13 +73,14 @@ export function KhatmahView({ pageStarts }: { pageStarts: PageStart[] }) {
     setPref("khatmahMode", next.mode);
     setPref("khatmahPages", next.pagesPerDay);
     setPref("khatmahTarget", next.targetDate);
+    setPref("khatmahStart", next.startDate);
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-12 md:px-8">
-      <div className="mb-8">
-        <p className="text-sm font-medium uppercase tracking-[.2em] text-gold">Khatmah Planner</p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight">Complete the Quran, a little each day</h1>
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-5 md:px-8 md:py-12">
+      <div className="mb-6 md:mb-8">
+        <p className="text-xs font-medium uppercase tracking-[.2em] text-gold sm:text-sm">Khatmah Planner</p>
+        <h1 className="mt-1.5 text-3xl font-semibold tracking-tight sm:mt-2 sm:text-4xl">Complete the Quran, a little each day</h1>
         <p className="mt-3 max-w-2xl leading-7 text-ink/60">
           Set a daily page goal or a target date, and your plan is calculated for you.
           Today&apos;s reading opens exactly where you should begin.
@@ -165,6 +176,12 @@ export function KhatmahView({ pageStarts }: { pageStarts: PageStart[] }) {
                 Starting at {todayStart.s}:{todayStart.n} → {todayEnd.s}:{todayEnd.n}
               </div>
             </div>
+            <button
+              onClick={() => update({ startDate: todayISO() })}
+              className="mt-4 text-xs font-medium text-ink/40 transition hover:text-gold"
+            >
+              Restart plan from today
+            </button>
           </div>
         </div>
 

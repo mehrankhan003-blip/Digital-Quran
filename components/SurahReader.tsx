@@ -33,24 +33,24 @@ export function SurahReader({ surah, ayahs, prevSurah, nextSurah, words, roman, 
       words={words}
       hasRoman={hasRoman}
       heading={
-        <header className="fade-up rounded-[2rem] bg-gradient-to-br from-gold/35 via-transparent to-forest/25 p-px">
-          <div className="rounded-[2rem] bg-surface p-7 text-center shadow-soft md:p-10">
-            <p className="flex items-center justify-center gap-3 text-xs uppercase tracking-[.25em] text-gold">
-              <span className="h-px w-8 bg-gold/40" />
+        <header className="fade-up rounded-[1.75rem] bg-gradient-to-br from-gold/35 via-transparent to-forest/25 p-px md:rounded-[2rem]">
+          <div className="rounded-[1.75rem] bg-surface p-5 text-center shadow-soft sm:p-7 md:rounded-[2rem] md:p-10">
+            <p className="flex items-center justify-center gap-2 text-[10px] uppercase tracking-[.22em] text-gold sm:gap-3 sm:text-xs sm:tracking-[.25em]">
+              <span className="h-px w-6 bg-gold/40 sm:w-8" />
               Surah {surah.number} · {surah.translation} · {surah.revelation}
-              <span className="h-px w-8 bg-gold/40" />
+              <span className="h-px w-6 bg-gold/40 sm:w-8" />
             </p>
-            <h1 className="quran-arabic mt-4 text-5xl leading-[1.6] text-forest md:text-6xl">
+            <h1 className="quran-arabic mt-3 text-4xl leading-[1.6] text-forest sm:mt-4 sm:text-5xl md:text-6xl">
               {surah.arabic}
             </h1>
-            <p className="mt-2 text-lg font-medium">{surah.english}</p>
+            <p className="mt-1.5 text-base font-medium sm:mt-2 sm:text-lg">{surah.english}</p>
             {surah.number !== 1 && surah.number !== 9 && (
-              <p className="quran-arabic mt-6 text-3xl leading-relaxed text-ink/80">
+              <p className="quran-arabic mt-4 text-2xl leading-relaxed text-ink/80 sm:mt-6 sm:text-3xl">
                 بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
               </p>
             )}
-            <div className="ornament-rule mx-auto mt-7 max-w-[16rem]" />
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-ink/55">
+            <div className="ornament-rule mx-auto mt-5 max-w-[16rem] sm:mt-7" />
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-ink/55 sm:mt-6">
               <span className="rounded-full border border-ink/10 bg-ivory/60 px-3.5 py-1.5">
                 Juz {surah.juzStart}
               </span>

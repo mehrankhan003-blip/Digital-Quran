@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AudioLines,
   Bookmark as BookmarkIcon,
   BookmarkCheck,
   Brain,
+  ChevronUp,
   Gauge,
+  Languages,
   Maximize2,
   Pause,
   Play,
@@ -18,7 +20,13 @@ import {
   StickyNote,
   X,
 } from "lucide-react";
-import { audioUrl, RECITERS } from "@/lib/audio";
+import {
+  arabicAudioUrl,
+  urduAudioUrl,
+  RECITERS,
+  reciterName,
+  DEFAULT_ARABIC_RECITER,
+} from "@/lib/audio";
 import { getPref, setPref } from "@/lib/prefs";
 import type { Word } from "@/lib/words";
 import {
@@ -34,7 +42,13 @@ import {
 
 export type TranslationMode = "arabic" | "urdu" | "roman" | "english" | "all";
 
-export type ReciteMode = "arabic" | "arabic-urdu";
+/**
+ * Recitation pipeline per ayah:
+ * - "arabic"      → Arabic recitation only
+ * - "arabic-urdu" → Arabic recitation, then Urdu tarjuma (Shamshad Ali Khan)
+ * - "urdu"        → Urdu tarjuma only
+ */
+export type ReciteMode = "arabic" | "arabic-urdu" | "urdu";
 
 export type ReaderItem = {
   s: number;
@@ -49,9 +63,15 @@ export type ReaderItem = {
 const TRANSLATION_OPTIONS: { id: TranslationMode; label: string }[] = [
   { id: "arabic", label: "Arabic" },
   { id: "urdu", label: "Urdu" },
-  { id: "roman", label: "Roman Urdu" },
+  { id: "roman", label: "Roman" },
   { id: "english", label: "English" },
-  { id: "all", label: "Show All" },
+  { id: "all", label: "All" },
+];
+
+const RECITE_OPTIONS: { id: ReciteMode; label: string; hint: string }[] = [
+  { id: "arabic", label: "Arabic", hint: "Arabic recitation only" },
+  { id: "arabic-urdu", label: "Arabic + Urdu", hint: "Arabic recitation followed by Urdu tarjuma (Shamshad Ali Khan)" },
+  { id: "urdu", label: "Urdu only", hint: "Urdu tarjuma recitation only (Shamshad Ali Khan)" },
 ];
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
@@ -65,43 +85,85 @@ type ReaderProps = {
   hasRoman?: boolean;
 };
 
+function splitWords(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean);
+}
+
+function isRealWord(wd: Word | undefined): boolean {
+  return !!wd && !!wd.w && !/^\(\d+\)$/.test(wd.e ?? "");
+}
+
 export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman = false }: ReaderProps) {
-  const [mode, setMode] = useState<TranslationMode>(() =>
-    getPref("translation", "urdu")
-  );
-  const [reciter, setReciter] = useState<string>(() =>
-    getPref("reciter", RECITERS[0].id)
-  );
+  // ---- persisted preferences -------------------------------------------
+  const [init] = useState(() => {
+    const savedReciter: string = getPref("reciter", RECITERS[0].id);
+    // Migration: ur.khan used to be a standalone reciter (Urdu-only audio).
+    // It is now the Urdu voice of the dual recitation engine.
+    if (savedReciter === "ur.khan") {
+      return { reciter: DEFAULT_ARABIC_RECITER, recite: "urdu" as ReciteMode };
+    }
+    const savedRecite = getPref<ReciteMode>("recite", "arabic-urdu");
+    const recite: ReciteMode =
+      savedRecite === "arabic" || savedRecite === "urdu" || savedRecite === "arabic-urdu"
+        ? savedRecite
+        : "arabic-urdu";
+    return { reciter: savedReciter, recite };
+  });
+
+  const [mode, setMode] = useState<TranslationMode>(() => getPref("translation", "urdu"));
+  const [reciter, setReciter] = useState<string>(init.reciter);
+  const [reciteMode, setReciteMode] = useState<ReciteMode>(init.recite);
+  const [speed, setSpeed] = useState<number>(() => getPref("speed", 1));
+  const [autoscroll, setAutoscroll] = useState<boolean>(() => getPref("autoscroll", true));
+  const [focus, setFocus] = useState<boolean>(() => getPref("focus", false));
+
+  // ---- playback state ----------------------------------------------------
   const [playing, setPlaying] = useState(false);
   const [index, setIndex] = useState(0);
-  const [seeded, setSeeded] = useState(false);
-  const [speed, setSpeed] = useState<number>(() => getPref("speed", 1));
-  const [repeatMode, setRepeatMode] = useState<"off" | "ayah" | "section">("off");
-  const [autoscroll, setAutoscroll] = useState<boolean>(() =>
-    getPref("autoscroll", true)
+  const [phase, setPhase] = useState<"arabic" | "urdu">(() =>
+    init.recite === "urdu" ? "urdu" : "arabic"
   );
-  const [focus, setFocus] = useState<boolean>(() => getPref("focus", false));
+  // Word highlight carries the ayah index it belongs to, so a stale highlight
+  // from a previous ayah never renders (no reset-in-effect needed).
+  const [activeWord, setActiveWord] = useState<{ i: number; w: number } | null>(null);
+  const [activeWbwWord, setActiveWbwWord] = useState<{ i: number; w: number } | null>(null);
+  const [repeatMode, setRepeatMode] = useState<"off" | "ayah" | "section">("off");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [audioError, setAudioError] = useState("");
+
+  // ---- reading modes -------------------------------------------------------
   const [wbw, setWbw] = useState(false);
   const [hifz, setHifz] = useState(false);
   const [hifzIndex, setHifzIndex] = useState(-1);
   const [hifzRevealed, setHifzRevealed] = useState(0);
-  const [reciteMode, setReciteMode] = useState<ReciteMode>(() =>
-    getPref("recite", "arabic")
-  );
-  const [speakingUrdu, setSpeakingUrdu] = useState(false);
+
+  // ---- seeding / resume ----------------------------------------------------
+  const [seeded, setSeeded] = useState(false);
   const [resumed, setResumed] = useState(false);
-  const playingRef = useRef(false);
-  const speechIdRef = useRef(0);
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
-  const [bookmarks, setBookmarks] = useState<Record<string, Bookmark>>(() =>
-    getBookmarks()
-  );
+
+  // ---- bookmarks & notes -----------------------------------------------------
+  const [bookmarks, setBookmarks] = useState<Record<string, Bookmark>>(() => getBookmarks());
   const [notes, setNotes] = useState<Record<string, string>>(() => getAllNotes());
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ---- refs ------------------------------------------------------------------
+  const arabicRef = useRef<HTMLAudioElement | null>(null);
+  const urduRef = useRef<HTMLAudioElement | null>(null);
+  const indexRef = useRef(index);
+  const countRef = useRef(items.length);
+  const playingRef = useRef(playing);
+  const repeatModeRef = useRef(repeatMode);
+  const reciteModeRef = useRef(reciteMode);
+  const arWordCountRef = useRef(0);
+  const urWordCountRef = useRef(0);
+  const wbwCountRef = useRef(0);
+
+  useEffect(() => { indexRef.current = index; }, [index]);
+  useEffect(() => { countRef.current = items.length; }, [items.length]);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+  useEffect(() => { reciteModeRef.current = reciteMode; }, [reciteMode]);
 
   useEffect(() => setPref("translation", mode), [mode]);
   useEffect(() => setPref("reciter", reciter), [reciter]);
@@ -116,12 +178,16 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
     return () => el.classList.remove("noor-focus");
   }, [focus]);
 
+  const count = items.length;
+  const current = items[index];
+  const nameOf = (s: number) =>
+    groupInfo?.find((g) => g.surah === s)?.english ?? `Surah ${s}`;
+
+  // ---- seed from #ayah hash or last-read history -----------------------------
   if (!seeded && typeof window !== "undefined") {
     const m = window.location.hash.match(/^#ayah-(\d+)-(\d+)$/);
     if (m) {
-      const i = items.findIndex(
-        (it) => it.s === Number(m[1]) && it.n === Number(m[2])
-      );
+      const i = items.findIndex((it) => it.s === Number(m[1]) && it.n === Number(m[2]));
       setSeeded(true);
       if (i >= 0) setIndex(i);
     } else {
@@ -139,8 +205,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
   }
 
   useEffect(() => {
-    if (!resumed) return;
-    if (typeof window === "undefined") return;
+    if (!resumed || typeof window === "undefined") return;
     const a = items[index];
     if (!a) return;
     const t = window.setTimeout(() => setResumed(false), 6000);
@@ -156,31 +221,24 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
     if (typeof window === "undefined") return;
     const m = window.location.hash.match(/^#ayah-(\d+)-(\d+)$/);
     if (!m) return;
-    const i = items.findIndex(
-      (it) => it.s === Number(m[1]) && it.n === Number(m[2])
-    );
+    const i = items.findIndex((it) => it.s === Number(m[1]) && it.n === Number(m[2]));
     if (i >= 0) {
       requestAnimationFrame(() => {
-        const el = document.getElementById(`ayah-${m[1]}-${m[2]}`);
-        el?.scrollIntoView({ behavior: "instant", block: "center" });
+        document
+          .getElementById(`ayah-${m[1]}-${m[2]}`)
+          ?.scrollIntoView({ behavior: "instant", block: "center" });
       });
     }
   }, [items]);
 
-  const hasWords = !!words && Object.keys(words).length > 0;
-  const isUrduReciter = RECITERS.find((r) => r.id === reciter)?.urdu ?? false;
-  const count = items.length;
-  const current = items[index];
-  const nameOf = (s: number) =>
-    groupInfo?.find((g) => g.surah === s)?.english ?? `Surah ${s}`;
-  const effMode: TranslationMode = focus ? "arabic" : mode;
-
+  // ---- helpers -----------------------------------------------------------------
   const recordHistory = (i: number) => {
     const a = items[i];
     if (a) addHistory({ s: a.s, n: a.n, surahName: nameOf(a.s) });
   };
 
   const playFrom = (i: number) => {
+    setAudioError("");
     setIndex(i);
     setPlaying(true);
     recordHistory(i);
@@ -188,145 +246,244 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
 
   const togglePlay = () => {
     if (!playing) recordHistory(index);
+    setAudioError("");
     setPlaying(!playing);
   };
 
-  const toggleBookmarkFor = (a: ReaderItem) => {
-    toggleBookmark({
-      s: a.s,
-      n: a.n,
-      surahName: nameOf(a.s),
-      a: a.a,
-      u: a.u,
-      e: a.e,
-    });
-    setBookmarks(getBookmarks());
-  };
+  const updateProgressBars = useCallback((ratio: number) => {
+    if (typeof document === "undefined") return;
+    const pct = `${Math.max(0, Math.min(100, ratio * 100)).toFixed(2)}%`;
+    document
+      .querySelectorAll<HTMLElement>("[data-player-progress]")
+      .forEach((el) => {
+        el.style.width = pct;
+      });
+  }, []);
 
-  const openNote = (a: ReaderItem) => {
-    const k = ayahKey(a.s, a.n);
-    setEditingNote(editingNote === k ? null : k);
-    setNoteText(notes[k] ?? "");
-  };
-
-  const saveNote = (a: ReaderItem) => {
-    const k = ayahKey(a.s, a.n);
-    setNote(a.s, a.n, noteText);
-    setNotes({ ...getAllNotes() });
-    setEditingNote(null);
-  };
-
+  // ---- word counts for the current ayah (for highlighting sync) -------------
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.src = audioUrl(reciter, current.s, current.n);
-    audio.load();
-    audio.playbackRate = speed;
-  }, [reciter, current.s, current.n, speed]);
+    const item = items[index];
+    arWordCountRef.current = item ? splitWords(item.a).length : 0;
+    urWordCountRef.current = item ? splitWords(item.u).length : 0;
+    const wbwWords = item ? words?.[`${item.s}:${item.n}`]?.filter(isRealWord) : undefined;
+    wbwCountRef.current = wbwWords?.length ?? 0;
+    updateProgressBars(0);
+  }, [index, items, words, updateProgressBars]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.playbackRate = speed;
-  }, [speed]);
+  // Effective audio phase: forced by recite mode, otherwise the dual pipeline state.
+  const effPhase: "arabic" | "urdu" =
+    reciteMode === "urdu" ? "urdu" : reciteMode === "arabic" ? "arabic" : phase;
 
+  // ---- audio engine -------------------------------------------------------------
+  // Load sources whenever the ayah / reciter / recite-mode changes.
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.play().catch(() => setPlaying(false));
+    const a = arabicRef.current;
+    const u = urduRef.current;
+    const item = items[index];
+    if (!a || !u || !item) return;
+
+    if (reciteMode !== "urdu") {
+      a.src = arabicAudioUrl(reciter, item.s, item.n);
+      a.load();
+      a.playbackRate = speed;
     } else {
-      audio.pause();
+      a.pause();
     }
-  }, [playing, index]);
 
+    if (reciteMode !== "arabic") {
+      u.src = urduAudioUrl(item.s, item.n);
+      u.load();
+      u.playbackRate = speed;
+    } else {
+      u.pause();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, reciter, reciteMode, items]);
+
+  // Play / pause the active phase.
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const advance = () => {
-      if (index >= count - 1) {
-        if (repeatMode === "section") {
-          setIndex(0);
-        } else {
-          setPlaying(false);
+    const a = arabicRef.current;
+    const u = urduRef.current;
+    if (!a || !u) return;
+    if (!playing) {
+      a.pause();
+      u.pause();
+      return;
+    }
+    const target = effPhase === "urdu" ? u : a;
+    const other = effPhase === "urdu" ? a : u;
+    other.pause();
+    target.playbackRate = speed;
+    target.play().catch(() => {
+      if (playingRef.current) setPlaying(false);
+    });
+  }, [playing, index, effPhase, reciter, reciteMode, speed]);
+
+  // Stable playback handlers (attached once).
+  const advance = useCallback(() => {
+    const i = indexRef.current;
+    if (i >= countRef.current - 1) {
+      if (repeatModeRef.current === "section") {
+        setIndex(0);
+      } else {
+        setPlaying(false);
+      }
+      return;
+    }
+    setIndex(i + 1);
+  }, []);
+
+  const onArabicEnded = useCallback(() => {
+    if (!playingRef.current) return;
+    if (reciteModeRef.current === "arabic") {
+      if (repeatModeRef.current === "ayah") {
+        const a = arabicRef.current;
+        if (a) {
+          a.currentTime = 0;
+          void a.play();
         }
         return;
-      }
-      setIndex((i) => i + 1);
-    };
-    const speakUrdu = (text: string): SpeechSynthesisUtterance | null => {
-      if (typeof window === "undefined" || !("speechSynthesis" in window))
-        return null;
-      const synth = window.speechSynthesis;
-      synth.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "ur-PK";
-      u.rate = 0.95;
-      const voices = synth.getVoices();
-      const urVoice = voices.find((v) =>
-        v.lang.toLowerCase().replace("_", "-").startsWith("ur")
-      );
-      if (urVoice) u.voice = urVoice;
-      return u;
-    };
-    const onEnded = () => {
-      if (repeatMode === "ayah") {
-        audio.currentTime = 0;
-        void audio.play();
-        return;
-      }
-      const item = items[index];
-      if (
-        !isUrduReciter &&
-        reciteMode === "arabic-urdu" &&
-        item?.u
-      ) {
-        const u = speakUrdu(item.u);
-        if (u) {
-          const spokenIndex = index;
-          const sid = speechIdRef.current;
-          const finish = () => {
-            setSpeakingUrdu(false);
-            if (
-              spokenIndex === index &&
-              playingRef.current &&
-              speechIdRef.current === sid
-            ) {
-              advance();
-            }
-          };
-          u.onend = finish;
-          u.onerror = finish;
-          window.speechSynthesis.speak(u);
-          setSpeakingUrdu(true);
-          return;
-        }
       }
       advance();
-    };
-    audio.addEventListener("ended", onEnded);
-    return () => audio.removeEventListener("ended", onEnded);
-  }, [index, count, repeatMode, reciteMode, items, isUrduReciter]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!playing) {
-      speechIdRef.current++;
-      window.speechSynthesis?.cancel();
-    }
-  }, [playing]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    speechIdRef.current++;
-    window.speechSynthesis?.cancel();
-    const t = window.setTimeout(() => setSpeakingUrdu(false), 0);
-    return () => window.clearTimeout(t);
-  }, [index, reciteMode, reciter]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("IntersectionObserver" in window))
       return;
+    }
+    // Dual mode → Urdu tarjuma phase.
+    setPhase("urdu");
+  }, [advance]);
+
+  const onUrduEnded = useCallback(() => {
+    if (!playingRef.current) return;
+    if (reciteModeRef.current === "urdu") {
+      if (repeatModeRef.current === "ayah") {
+        const u = urduRef.current;
+        if (u) {
+          u.currentTime = 0;
+          void u.play();
+        }
+        return;
+      }
+      advance();
+      return;
+    }
+    // Dual mode finished both parts.
+    if (repeatModeRef.current === "ayah") {
+      const a = arabicRef.current;
+      if (a) a.currentTime = 0;
+      setPhase("arabic");
+      return;
+    }
+    advance();
+  }, [advance]);
+
+  const onArabicTime = useCallback(() => {
+    const a = arabicRef.current;
+    if (!a || !isFinite(a.duration) || a.duration <= 0) return;
+    const ratio = a.currentTime / a.duration;
+    updateProgressBars(ratio);
+    const i = indexRef.current;
+    const arCount = arWordCountRef.current;
+    if (arCount > 0) {
+      setActiveWord({ i, w: Math.min(arCount - 1, Math.floor(ratio * arCount)) });
+    }
+    const wbwCount = wbwCountRef.current;
+    if (wbwCount > 0) {
+      setActiveWbwWord({ i, w: Math.min(wbwCount - 1, Math.floor(ratio * wbwCount)) });
+    }
+  }, [updateProgressBars]);
+
+  const onUrduTime = useCallback(() => {
+    const u = urduRef.current;
+    if (!u || !isFinite(u.duration) || u.duration <= 0) return;
+    const ratio = u.currentTime / u.duration;
+    updateProgressBars(ratio);
+    const i = indexRef.current;
+    const urCount = urWordCountRef.current;
+    if (urCount > 0) {
+      setActiveWord({ i, w: Math.min(urCount - 1, Math.floor(ratio * urCount)) });
+    }
+  }, [updateProgressBars]);
+
+  const onArabicError = useCallback(() => {
+    const a = arabicRef.current;
+    if (!playingRef.current || !a || !a.error) return;
+    setAudioError("Audio load nahi hua — network check karein ya doosra reciter chunein.");
+    if (reciteModeRef.current === "arabic-urdu") {
+      setPhase("urdu"); // fall back to the Urdu part
+    } else {
+      advance();
+    }
+  }, [advance]);
+
+  const onUrduError = useCallback(() => {
+    const u = urduRef.current;
+    if (!playingRef.current || !u || !u.error) return;
+    setAudioError("Urdu audio load nahi hua — network check karein.");
+    advance();
+  }, [advance]);
+
+  useEffect(() => {
+    const a = arabicRef.current;
+    const u = urduRef.current;
+    if (!a || !u) return;
+    a.addEventListener("ended", onArabicEnded);
+    u.addEventListener("ended", onUrduEnded);
+    a.addEventListener("timeupdate", onArabicTime);
+    u.addEventListener("timeupdate", onUrduTime);
+    a.addEventListener("error", onArabicError);
+    u.addEventListener("error", onUrduError);
+    return () => {
+      a.removeEventListener("ended", onArabicEnded);
+      u.removeEventListener("ended", onUrduEnded);
+      a.removeEventListener("timeupdate", onArabicTime);
+      u.removeEventListener("timeupdate", onUrduTime);
+      a.removeEventListener("error", onArabicError);
+      u.removeEventListener("error", onUrduError);
+    };
+  }, [onArabicEnded, onUrduEnded, onArabicTime, onUrduTime, onArabicError, onUrduError]);
+
+  // Stop everything on unmount.
+  useEffect(() => {
+    const a = arabicRef.current;
+    const u = urduRef.current;
+    return () => {
+      a?.pause();
+      u?.pause();
+    };
+  }, []);
+
+  // ---- lock screen / media session ------------------------------------------
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const item = items[index];
+    if (!item) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `${nameOf(item.s)} — Ayah ${item.n}`,
+        artist:
+          reciteMode === "urdu"
+            ? "Shamshad Ali Khan (Urdu Tarjuma)"
+            : reciteMode === "arabic-urdu"
+              ? `${reciterName(reciter)} + Shamshad Ali Khan`
+              : reciterName(reciter),
+        album: "Digital Quran",
+      });
+      navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
+      navigator.mediaSession.setActionHandler("pause", () => setPlaying(false));
+      navigator.mediaSession.setActionHandler("previoustrack", () =>
+        setIndex((i) => Math.max(0, i - 1))
+      );
+      navigator.mediaSession.setActionHandler("nexttrack", () =>
+        setIndex((i) => Math.min(countRef.current - 1, i + 1))
+      );
+    } catch {
+      // media session unsupported — ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, items, reciter, reciteMode]);
+
+  // ---- reading-history tracking on scroll ------------------------------------
+  useEffect(() => {
+    if (typeof window === "undefined" || !("IntersectionObserver" in window)) return;
     let lastRecord = 0;
     let pending: string | null = null;
     let timer: number | null = null;
@@ -336,11 +493,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
       const a = items.find((it) => it.s === s && it.n === n);
       if (a) {
         const meta = groupInfo?.find((g) => g.surah === a.s);
-        addHistory({
-          s: a.s,
-          n: a.n,
-          surahName: meta?.english ?? `Surah ${a.s}`,
-        });
+        addHistory({ s: a.s, n: a.n, surahName: meta?.english ?? `Surah ${a.s}` });
       }
       pending = null;
     };
@@ -375,32 +528,72 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
     };
   }, [items, groupInfo]);
 
+  // ---- auto-scroll with recitation ---------------------------------------------
   useEffect(() => {
     if (!autoscroll || !playing) return;
-    const el = document.getElementById(`ayah-${current.s}-${current.n}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [index, playing, autoscroll, current.s, current.n]);
+    const el = document.getElementById(`ayah-${current?.s}-${current?.n}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [index, playing, autoscroll, current?.s, current?.n]);
 
+  // ---- bookmarks & notes ----------------------------------------------------------
+  const toggleBookmarkFor = (a: ReaderItem) => {
+    toggleBookmark({
+      s: a.s,
+      n: a.n,
+      surahName: nameOf(a.s),
+      a: a.a,
+      u: a.u,
+      e: a.e,
+    });
+    setBookmarks(getBookmarks());
+  };
+
+  const openNote = (a: ReaderItem) => {
+    const k = ayahKey(a.s, a.n);
+    setEditingNote(editingNote === k ? null : k);
+    setNoteText(notes[k] ?? "");
+  };
+
+  const saveNote = (a: ReaderItem) => {
+    const k = ayahKey(a.s, a.n);
+    setNote(a.s, a.n, noteText);
+    setNotes({ ...getAllNotes() });
+    setEditingNote(null);
+  };
+
+  // ---- render helpers ---------------------------------------------------------------
+  const effMode: TranslationMode = focus ? "arabic" : mode;
   const showRoman = effMode === "roman" || effMode === "all";
   const showUrdu = effMode === "urdu" || effMode === "all";
   const showEnglish = effMode === "english" || effMode === "all";
+  const hasWords = !!words && Object.keys(words).length > 0;
 
   const renderArabic = (a: ReaderItem, i: number) => {
-    const wbwWords = words?.[`${a.s}:${a.n}`];
-    const wbwReal = wbwWords?.filter((wd) => wd && wd.w && !/^\(\d+\)$/.test(wd.e ?? ""));
-    if (wbw && i === index && wbwReal && wbwReal.length > 0) {
+    const wbwWords = words?.[`${a.s}:${a.n}`]?.filter(isRealWord);
+    const isActiveAyah = i === index;
+    const highlightAr = isActiveAyah && playing && effPhase === "arabic";
+    const activeWbw = activeWbwWord?.i === i ? activeWbwWord.w : -1;
+
+    if (wbw && isActiveAyah && wbwWords && wbwWords.length > 0) {
       return (
-        <div className="mt-6">
-          <div className="mb-3 text-xs text-ink/45">
-            Word by word · {wbwReal.length} words
+        <div className="mt-5">
+          <div className="mb-3 flex items-center justify-between text-xs text-ink/45">
+            <span>Word by word · {wbwWords.length} words</span>
+            {highlightAr && (
+              <span className="eq text-gold" aria-hidden>
+                <span /><span /><span /><span />
+              </span>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3" dir="rtl">
-            {wbwReal.map((wd, wi) => (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" dir="rtl">
+            {wbwWords.map((wd, wi) => (
               <div
                 key={wi}
-                className="rounded-xl border border-ink/10 bg-ivory/40 p-2.5 text-center"
+                className={`rounded-xl border p-2.5 text-center transition-all duration-300 ${
+                  highlightAr && wi === activeWbw
+                    ? "wbw-card-active border-gold/60 bg-gold/10 shadow-sm"
+                    : "border-ink/10 bg-ivory/40"
+                }`}
               >
                 <div className="quran-arabic text-xl leading-8 text-ink">{wd.w}</div>
                 <div className="mt-1 text-[11px] font-medium text-forest" dir="ltr">
@@ -415,8 +608,9 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
         </div>
       );
     }
-    if (hifz && i === index) {
-      const tokens = a.a.split(/\s+/);
+
+    if (hifz && isActiveAyah) {
+      const tokens = splitWords(a.a);
       const revealedCount = hifzIndex === index ? hifzRevealed : 0;
       const revealed = tokens.slice(0, revealedCount);
       const hidden = tokens.slice(revealedCount);
@@ -425,21 +619,23 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
         setHifzRevealed((r) => Math.min(tokens.length, r + 1));
       };
       return (
-        <div className="mt-6">
-          <div className="flex items-center justify-between text-xs text-ink/45">
-            <span>
-              Hifz · {revealedCount} / {tokens.length} words revealed
-            </span>
+        <div className="mt-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/45">
+            <span>Hifz · {revealedCount} / {tokens.length} words</span>
             <div className="flex gap-2">
               <button
-                onClick={revealWord}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  revealWord();
+                }}
                 disabled={revealedCount >= tokens.length}
                 className="rounded-full bg-forest px-3 py-1 font-medium text-white transition hover:opacity-90 disabled:opacity-40"
               >
                 Reveal word
               </button>
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setHifzIndex(index);
                   setHifzRevealed(tokens.length);
                 }}
@@ -449,14 +645,10 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
               </button>
             </div>
           </div>
-          <div className="quran-arabic mt-4 flex flex-wrap justify-end gap-x-2 text-right text-3xl leading-[2.4] text-ink md:text-[2.5rem]">
-            {revealed.length > 0 && (
-              <span className="flex flex-wrap justify-end gap-x-2">
-                {revealed.map((w, wi) => (
-                  <span key={wi}>{w}</span>
-                ))}
-              </span>
-            )}
+          <div className="quran-arabic mt-4 flex flex-wrap justify-end gap-x-2 text-right text-[1.75rem] leading-[2.3] text-ink md:text-[2.4rem]">
+            {revealed.map((w, wi) => (
+              <span key={wi}>{w}</span>
+            ))}
             {hidden.map((w, wi) => (
               <span
                 key={`h${wi}`}
@@ -469,231 +661,65 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
         </div>
       );
     }
+
+    const tokens = splitWords(a.a);
+    const activeAr = activeWord?.i === i ? activeWord.w : -1;
     return (
-      <div className="quran-arabic mt-6 text-right text-3xl leading-[2.4] text-ink md:text-[2.5rem]">
-        {a.a}
+      <div className="quran-arabic mt-5 text-right text-[1.75rem] leading-[2.3] text-ink md:text-[2.4rem] md:leading-[2.1]">
+        {tokens.map((t, ti) => (
+          <span
+            key={ti}
+            className={`wbw-word ${highlightAr && ti === activeAr ? "wbw-word-active" : ""}`}
+          >
+            {t}
+            {ti < tokens.length - 1 ? " " : ""}
+          </span>
+        ))}
       </div>
     );
   };
 
+  const renderUrduText = (a: ReaderItem, i: number) => {
+    const highlightUr = i === index && playing && effPhase === "urdu";
+    if (!highlightUr) return a.u;
+    const tokens = splitWords(a.u);
+    const activeUr = activeWord?.i === i ? activeWord.w : -1;
+    return (
+      <>
+        {tokens.map((t, ti) => (
+          <span
+            key={ti}
+            className={`wbw-word ${ti === activeUr ? "wbw-word-active" : ""}`}
+          >
+            {t}
+            {ti < tokens.length - 1 ? " " : ""}
+          </span>
+        ))}
+      </>
+    );
+  };
+
+  const phaseLabel =
+    effPhase === "urdu" ? "Urdu tarjuma" : reciteMode === "urdu" ? "Urdu tarjuma" : "Arabic";
+
+  // ================================================================================
   return (
     <>
-      {!focus && (
-        <div className="glass sticky top-16 z-40 mt-6 rounded-2xl border border-ink/10 p-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={togglePlay}
-                className={`relative flex h-11 w-11 items-center justify-center rounded-full text-white shadow-card transition-all hover:scale-105 ${
-                  playing
-                    ? "bg-gradient-to-br from-gold to-gold/80"
-                    : "bg-gradient-to-br from-forest to-forest/80"
-                }`}
-                aria-label={playing ? "Pause" : "Play"}
-              >
-                {playing ? <Pause size={18} /> : <Play size={18} className="translate-x-[1px]" />}
-                {playing && (
-                  <span className="eq eq-paused absolute -right-1.5 -top-1.5 rounded-md bg-surface px-1 py-0.5 text-gold shadow-sm">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                )}
-              </button>
-              <div className="flex min-w-0 flex-col">
-                <div className="flex items-center gap-1.5 text-sm font-medium">
-                  {playing ? (
-                    <>
-                      <span className="eq text-forest">
-                        <span />
-                        <span />
-                        <span />
-                        <span />
-                      </span>
-                      Reciting
-                    </>
-                  ) : (
-                    "Recitation"
-                  )}
-                </div>
-                <select
-                  value={reciter}
-                  onChange={(e) => setReciter(e.target.value)}
-                  className="mt-0.5 max-w-[46vw] cursor-pointer rounded-lg border border-ink/10 bg-surface px-1.5 py-0.5 text-xs font-medium text-forest sm:max-w-[220px]"
-                  aria-label="Reciter"
-                >
-                  {RECITERS.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+      <audio ref={arabicRef} preload="auto" />
+      <audio ref={urduRef} preload="auto" />
 
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setIndex(Math.max(0, index - 1))}
-                disabled={index <= 0}
-                className="rounded-xl p-2 text-ink/55 transition hover:bg-surface disabled:opacity-30"
-                aria-label="Previous ayah"
-              >
-                <SkipBack size={17} />
-              </button>
-              <button
-                onClick={() => setIndex(Math.min(count - 1, index + 1))}
-                disabled={index >= count - 1}
-                className="rounded-xl p-2 text-ink/55 transition hover:bg-surface disabled:opacity-30"
-                aria-label="Next ayah"
-              >
-                <SkipForward size={17} />
-              </button>
-              <button
-                onClick={() =>
-                  setRepeatMode(
-                    repeatMode === "off"
-                      ? "ayah"
-                      : repeatMode === "ayah"
-                        ? "section"
-                        : "off"
-                  )
-                }
-                className={`rounded-xl p-2 transition hover:bg-surface ${
-                  repeatMode !== "off" ? "text-gold" : "text-ink/55"
-                }`}
-                aria-label="Repeat"
-                title={
-                  repeatMode === "ayah"
-                    ? "Repeat ayah"
-                    : repeatMode === "section"
-                      ? "Repeat section"
-                      : "Repeat off"
-                }
-              >
-                {repeatMode === "ayah" ? <Repeat1 size={17} /> : <Repeat size={17} />}
-              </button>
-              <button
-                onClick={() =>
-                  setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])
-                }
-                className={`flex items-center gap-1 rounded-xl px-2.5 py-2 text-xs font-semibold transition hover:bg-surface ${
-                  speed !== 1 ? "bg-gold/12 text-gold" : "text-ink/55"
-                }`}
-                aria-label="Playback speed"
-                title={`Speed ${speed}×`}
-              >
-                <Gauge size={16} />
-                {speed}×
-              </button>
-              <button
-                onClick={() => setAutoscroll(!autoscroll)}
-                className={`rounded-xl p-2 transition hover:bg-surface ${
-                  autoscroll ? "text-gold" : "text-ink/55"
-                }`}
-                aria-label="Auto-scroll"
-                title="Auto-scroll with recitation"
-              >
-                <SlidersHorizontal size={17} />
-              </button>
-              <button
-                onClick={() => setHifz(!hifz)}
-                className={`rounded-xl p-2 transition hover:bg-surface ${
-                  hifz ? "text-gold" : "text-ink/55"
-                }`}
-                aria-label="Hifz (memorization) mode"
-                title="Hifz mode: reveal words as you memorise"
-              >
-                <Brain size={17} />
-              </button>
-              <button
-                onClick={() => setFocus(true)}
-                className="rounded-xl p-2 text-ink/55 transition hover:bg-surface"
-                aria-label="Focus / Mushaf mode"
-                title="Distraction-free Mushaf reading"
-              >
-                <Maximize2 size={17} />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-ink/5 pt-2">
-            <div className="flex flex-wrap items-center gap-1">
-              {TRANSLATION_OPTIONS.map((opt) => {
-                const disabled = opt.id === "roman" && !hasRoman;
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => setMode(opt.id)}
-                    disabled={disabled}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                      mode === opt.id
-                        ? "bg-forest text-white"
-                        : "bg-surface text-ink/60 hover:bg-ivory"
-                    } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
-                    title={disabled ? "Roman Urdu translation coming soon" : undefined}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => setWbw(!wbw)}
-                disabled={!hasWords}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  wbw
-                    ? "bg-forest text-white"
-                    : "bg-surface text-ink/60 hover:bg-ivory"
-                } ${!hasWords ? "cursor-not-allowed opacity-40" : ""}`}
-                title={hasWords ? "Word by word meanings (English)" : "Word-by-word data not available"}
-              >
-                Word by Word
-              </button>
-              <button
-                onClick={() =>
-                  setReciteMode(reciteMode === "arabic" ? "arabic-urdu" : "arabic")
-                }
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
-                  reciteMode === "arabic-urdu"
-                    ? "bg-gold text-white"
-                    : "bg-surface text-ink/60 hover:bg-ivory"
-                } ${isUrduReciter ? "hidden" : ""}`}
-                title={
-                  reciteMode === "arabic-urdu"
-                    ? "Reciting Arabic then Urdu tarjuma"
-                    : "Reciting Arabic only"
-                }
-                aria-label="Toggle Urdu recitation"
-              >
-                <AudioLines size={14} />
-                {reciteMode === "arabic-urdu" ? "Arabic + Urdu" : "Arabic only"}
-              </button>
-              {isUrduReciter && (
-                <span className="flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">
-                  <AudioLines size={14} /> Urdu tarjuma included
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-ink/45">
-              Ayah {index + 1} of {count}
-            </div>
-          </div>
+      {resumed && !focus && current && (
+        <div className="fade-up fixed left-1/2 top-20 z-50 -translate-x-1/2 whitespace-nowrap rounded-full border border-gold/40 bg-surface px-4 py-2 text-xs font-medium text-forest shadow-soft">
+          Resumed · Ayah {current.n} {nameOf(current.s)}
         </div>
       )}
 
-      <audio ref={audioRef} preload="auto" />
-
-      {resumed && !focus && (
-        <div className="fade-up fixed left-1/2 top-20 z-50 -translate-x-1/2 rounded-full border border-gold/40 bg-surface px-4 py-2 text-xs font-medium text-forest shadow-soft">
-          Resumed from Ayah {current.n} · {nameOf(current.s)}
-        </div>
-      )}
-
-      <section className={`mt-6 space-y-5 ${focus ? "mt-10 md:mt-14" : ""}`}>
+      <section className={`space-y-4 md:space-y-5 ${focus ? "mt-2 md:mt-6" : "mt-5"}`}>
         {!focus && heading}
 
         {items.map((a, i) => {
-          const active = i === index && (playing || speakingUrdu);
-          const urduActive = i === index && speakingUrdu;
+          const active = i === index && playing;
+          const urduActive = active && effPhase === "urdu";
           const newSurah = i === 0 || items[i - 1].s !== a.s;
           const info = groupInfo?.find((g) => g.surah === a.s);
           const bmKey = ayahKey(a.s, a.n);
@@ -701,7 +727,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
           return (
             <div key={`${a.s}-${a.n}`}>
               {newSurah && info && !focus && (
-                <div className="sticky top-[215px] z-30 flex items-center justify-between rounded-2xl border border-ink/10 bg-surface/90 px-4 py-2 shadow-sm backdrop-blur md:top-40">
+                <div className="sticky top-[4.4rem] z-30 flex items-center justify-between rounded-2xl border border-ink/10 bg-surface/90 px-4 py-2 shadow-sm backdrop-blur md:top-20">
                   <span className="text-sm font-semibold">
                     {info.english}{" "}
                     <span className="text-ink/40">· {info.ayahs} Ayahs</span>
@@ -712,15 +738,15 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
               <article
                 id={`ayah-${a.s}-${a.n}`}
                 onClick={() => playFrom(i)}
-                className={`cursor-pointer rounded-[1.75rem] border p-6 transition md:p-8 ${
+                className={`cursor-pointer rounded-3xl border p-4 transition-all duration-300 sm:p-6 md:p-7 ${
                   active
-                    ? "ayah-active border-gold/60 bg-gradient-to-br from-surface via-surface to-gold/[0.04] shadow-soft ring-1 ring-gold/30"
+                    ? "ayah-active border-gold/50 bg-surface shadow-soft ring-1 ring-gold/25"
                     : "border-ink/10 bg-surface hover:border-gold/30"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span
-                    className={`relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold ${
+                    className={`relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
                       active
                         ? "bg-gradient-to-br from-forest to-forest/80 text-white shadow-card"
                         : "bg-ivory text-forest"
@@ -728,20 +754,14 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                   >
                     {a.n}
                     {active && (
-                      <span className="eq absolute -right-2 -top-1.5 text-gold">
-                        <span />
-                        <span />
-                        <span />
-                        <span />
+                      <span className="eq absolute -right-2.5 -top-1.5 text-gold" aria-hidden>
+                        <span /><span /><span /><span />
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {a.sajdah && (
-                      <span
-                        className="text-xs text-gold"
-                        title="Sajdah (prostration)"
-                      >
+                      <span className="text-xs text-gold" title="Sajdah (prostration)">
                         ۩ سجدہ
                       </span>
                     )}
@@ -756,11 +776,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                       aria-label={bookmarks[bmKey] ? "Remove bookmark" : "Bookmark"}
                       title="Bookmark this ayah"
                     >
-                      {bookmarks[bmKey] ? (
-                        <BookmarkCheck size={16} />
-                      ) : (
-                        <BookmarkIcon size={16} />
-                      )}
+                      {bookmarks[bmKey] ? <BookmarkCheck size={16} /> : <BookmarkIcon size={16} />}
                     </button>
                     <button
                       onClick={(e) => {
@@ -810,38 +826,45 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                   </div>
                 )}
 
-                <div className="mt-6 space-y-3 border-t border-ink/5 pt-5">
+                <div className="mt-4 space-y-2.5 border-t border-ink/5 pt-4">
                   {showUrdu && (
                     <div
-                      className={`rounded-xl p-3 ${
+                      className={`rounded-2xl p-3.5 transition-colors duration-300 ${
                         urduActive ? "urdu-speaking" : "bg-ivory/40"
                       }`}
                     >
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gold">
-                        اردو ترجمہ
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold">
+                          اردو ترجمہ
+                        </span>
+                        {urduActive && (
+                          <span className="eq text-gold" aria-hidden>
+                            <span /><span /><span />
+                          </span>
+                        )}
                       </div>
                       <p
-                        className="mt-1.5 text-right text-lg leading-8 text-ink/80"
+                        className="text-right text-base leading-8 text-ink/80 md:text-lg"
                         dir="rtl"
                       >
-                        {a.u}
+                        {renderUrduText(a, i)}
                       </p>
                     </div>
                   )}
                   {showEnglish && (
-                    <div className="rounded-xl p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gold">
+                    <div className="rounded-2xl p-3.5">
+                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold">
                         English
                       </div>
-                      <p className="mt-1.5 leading-7 text-ink/65">{a.e}</p>
+                      <p className="text-sm leading-7 text-ink/65 md:text-base">{a.e}</p>
                     </div>
                   )}
                   {showRoman && (
-                    <div className="rounded-xl p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gold">
+                    <div className="rounded-2xl p-3.5">
+                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold">
                         Roman Urdu
                       </div>
-                      <p className="mt-1.5 leading-7 text-ink/65" dir="ltr">
+                      <p className="text-sm leading-7 text-ink/65 md:text-base" dir="ltr">
                         {a.r ?? "Roman Urdu translation coming soon."}
                       </p>
                     </div>
@@ -855,6 +878,346 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
 
       {!focus && footerNav}
 
+      {/* ============ Mini player (mobile-first) ============ */}
+      {!focus && current && (
+        <div className="fixed inset-x-0 bottom-[calc(3.9rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-5 md:left-1/2 md:w-[30rem] md:-translate-x-1/2 md:px-0">
+          <div
+            onClick={() => setSheetOpen(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSheetOpen(true);
+            }}
+            className="glass-strong cursor-pointer rounded-2xl border border-ink/10 p-2.5 shadow-lift transition hover:border-gold/30"
+            aria-label="Open player"
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePlay();
+                }}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-card transition-transform active:scale-95 ${
+                  playing
+                    ? "bg-gradient-to-br from-gold to-gold/80"
+                    : "bg-gradient-to-br from-forest to-forest/80"
+                }`}
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {playing ? <Pause size={18} /> : <Play size={18} className="translate-x-[1px]" />}
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold">
+                    {nameOf(current.s)} · Ayah {current.n}
+                  </span>
+                  {playing && (
+                    <span className="eq shrink-0 text-forest" aria-hidden>
+                      <span /><span /><span />
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink/50">
+                  <span
+                    className={`rounded-full px-1.5 py-px font-semibold ${
+                      effPhase === "urdu" ? "bg-gold/15 text-gold" : "bg-forest/10 text-forest"
+                    }`}
+                  >
+                    {playing ? phaseLabel : reciteMode === "arabic-urdu" ? "Arabic + Urdu" : reciteMode === "urdu" ? "Urdu" : "Arabic"}
+                  </span>
+                  <span className="truncate">
+                    {reciteMode === "urdu" ? "Shamshad Ali Khan" : reciterName(reciter)}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIndex(Math.max(0, index - 1));
+                }}
+                disabled={index <= 0}
+                className="hidden rounded-xl p-2 text-ink/55 transition hover:bg-surface disabled:opacity-30 sm:block"
+                aria-label="Previous ayah"
+              >
+                <SkipBack size={17} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIndex(Math.min(count - 1, index + 1));
+                }}
+                disabled={index >= count - 1}
+                className="hidden rounded-xl p-2 text-ink/55 transition hover:bg-surface disabled:opacity-30 sm:block"
+                aria-label="Next ayah"
+              >
+                <SkipForward size={17} />
+              </button>
+              <ChevronUp size={18} className="shrink-0 text-ink/35" />
+            </div>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-ink/10">
+              <div
+                data-player-progress
+                className="h-full rounded-full bg-gradient-to-r from-forest to-gold transition-[width] duration-300 ease-linear"
+                style={{ width: "0%" }}
+              />
+            </div>
+          </div>
+          {audioError && (
+            <div className="mt-2 rounded-xl border border-red-300/60 bg-red-50/90 px-3 py-2 text-center text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950/90 dark:text-red-300">
+              {audioError}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ============ Player sheet (expanded controls) ============ */}
+      {sheetOpen && !focus && current && (
+        <div className="fixed inset-0 z-[70]">
+          <div
+            className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+            onClick={() => setSheetOpen(false)}
+            aria-hidden
+          />
+          <div className="player-sheet absolute inset-x-0 bottom-0 mx-auto max-h-[88vh] w-full overflow-y-auto rounded-t-[1.75rem] border-t border-ink/10 bg-surface px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 shadow-lift md:bottom-5 md:max-w-lg md:rounded-[1.75rem] md:border">
+            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-ink/15" />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">
+                  Now reciting
+                </div>
+                <div className="mt-1 truncate text-lg font-semibold">
+                  {nameOf(current.s)} · Ayah {current.n}
+                </div>
+                <div className="mt-0.5 text-xs text-ink/50">
+                  Ayah {index + 1} of {count} ·{" "}
+                  {reciteMode === "urdu" ? "Shamshad Ali Khan" : reciterName(reciter)}
+                  {reciteMode === "arabic-urdu" && " + Shamshad Ali Khan (Urdu)"}
+                </div>
+              </div>
+              <button
+                onClick={() => setSheetOpen(false)}
+                className="rounded-full bg-ivory p-2 text-ink/60 transition hover:bg-mist"
+                aria-label="Close player"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink/10">
+              <div
+                data-player-progress
+                className="h-full rounded-full bg-gradient-to-r from-forest to-gold transition-[width] duration-300 ease-linear"
+                style={{ width: "0%" }}
+              />
+            </div>
+
+            {/* transport */}
+            <div className="mt-5 flex items-center justify-center gap-5">
+              <button
+                onClick={() => setIndex(Math.max(0, index - 1))}
+                disabled={index <= 0}
+                className="rounded-full bg-ivory p-3.5 text-ink/70 transition hover:bg-mist disabled:opacity-30"
+                aria-label="Previous ayah"
+              >
+                <SkipBack size={20} />
+              </button>
+              <button
+                onClick={togglePlay}
+                className={`flex h-16 w-16 items-center justify-center rounded-full text-white shadow-lift transition-transform active:scale-95 ${
+                  playing
+                    ? "bg-gradient-to-br from-gold to-gold/80"
+                    : "bg-gradient-to-br from-forest to-forest/80"
+                }`}
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {playing ? <Pause size={26} /> : <Play size={26} className="translate-x-[2px]" />}
+              </button>
+              <button
+                onClick={() => setIndex(Math.min(count - 1, index + 1))}
+                disabled={index >= count - 1}
+                className="rounded-full bg-ivory p-3.5 text-ink/70 transition hover:bg-mist disabled:opacity-30"
+                aria-label="Next ayah"
+              >
+                <SkipForward size={20} />
+              </button>
+            </div>
+
+            {/* recite mode */}
+            <div className="mt-6">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink/60">
+                <AudioLines size={14} className="text-gold" /> Recitation mode
+              </div>
+              <div className="grid grid-cols-3 gap-1 rounded-2xl border border-ink/10 bg-ivory/60 p-1">
+                {RECITE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setReciteMode(opt.id)}
+                    title={opt.hint}
+                    className={`rounded-xl px-2 py-2 text-xs font-semibold transition ${
+                      reciteMode === opt.id
+                        ? "bg-forest text-white shadow-sm"
+                        : "text-ink/60 hover:bg-surface"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-4 text-ink/45">
+                Arabic + Urdu: har ayah ke baad Shamshad Ali Khan ka Urdu tarjuma audio mein
+                chalta hai — word-by-word highlighting dono par hoti hai.
+              </p>
+            </div>
+
+            {/* reciter */}
+            <div className="mt-5">
+              <div className="mb-2 text-xs font-semibold text-ink/60">Arabic reciter</div>
+              <select
+                value={reciter}
+                onChange={(e) => setReciter(e.target.value)}
+                disabled={reciteMode === "urdu"}
+                className="w-full cursor-pointer rounded-xl border border-ink/10 bg-surface px-3 py-2.5 text-sm font-medium text-forest disabled:opacity-40"
+                aria-label="Reciter"
+              >
+                {RECITERS.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* speed + repeat */}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-ink/60">
+                  <Gauge size={13} className="text-gold" /> Speed
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SPEEDS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setSpeed(s)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        speed === s
+                          ? "bg-forest text-white"
+                          : "bg-ivory text-ink/60 hover:bg-mist"
+                      }`}
+                    >
+                      {s}×
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-ink/60">
+                  <Repeat size={13} className="text-gold" /> Repeat
+                </div>
+                <div className="flex gap-1.5">
+                  {(["off", "ayah", "section"] as const).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setRepeatMode(r)}
+                      className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                        repeatMode === r
+                          ? "bg-gold text-white"
+                          : "bg-ivory text-ink/60 hover:bg-mist"
+                      }`}
+                    >
+                      {r === "ayah" ? <Repeat1 size={12} /> : null}
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* translation layers */}
+            <div className="mt-5">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-ink/60">
+                <Languages size={13} className="text-gold" /> Translation
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {TRANSLATION_OPTIONS.map((opt) => {
+                  const disabled = opt.id === "roman" && !hasRoman;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => setMode(opt.id)}
+                      disabled={disabled}
+                      className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+                        mode === opt.id
+                          ? "bg-forest text-white"
+                          : "bg-ivory text-ink/60 hover:bg-mist"
+                      } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* toggles */}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setAutoscroll(!autoscroll)}
+                className={`flex items-center justify-between rounded-2xl border px-3.5 py-3 text-left text-xs font-semibold transition ${
+                  autoscroll
+                    ? "border-gold/40 bg-gold/10 text-gold"
+                    : "border-ink/10 bg-ivory/60 text-ink/60"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <SlidersHorizontal size={14} /> Auto-scroll
+                </span>
+                <span>{autoscroll ? "On" : "Off"}</span>
+              </button>
+              <button
+                onClick={() => setWbw(!wbw)}
+                disabled={!hasWords}
+                className={`flex items-center justify-between rounded-2xl border px-3.5 py-3 text-left text-xs font-semibold transition ${
+                  wbw
+                    ? "border-gold/40 bg-gold/10 text-gold"
+                    : "border-ink/10 bg-ivory/60 text-ink/60"
+                } ${!hasWords ? "cursor-not-allowed opacity-40" : ""}`}
+              >
+                <span className="flex items-center gap-2">
+                  <Languages size={14} /> Word by word
+                </span>
+                <span>{wbw ? "On" : "Off"}</span>
+              </button>
+              <button
+                onClick={() => setHifz(!hifz)}
+                className={`flex items-center justify-between rounded-2xl border px-3.5 py-3 text-left text-xs font-semibold transition ${
+                  hifz
+                    ? "border-gold/40 bg-gold/10 text-gold"
+                    : "border-ink/10 bg-ivory/60 text-ink/60"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Brain size={14} /> Hifz mode
+                </span>
+                <span>{hifz ? "On" : "Off"}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setSheetOpen(false);
+                  setFocus(true);
+                }}
+                className="flex items-center justify-between rounded-2xl border border-ink/10 bg-ivory/60 px-3.5 py-3 text-left text-xs font-semibold text-ink/60 transition hover:bg-mist"
+              >
+                <span className="flex items-center gap-2">
+                  <Maximize2 size={14} /> Mushaf focus
+                </span>
+                <span>Open</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ focus mode chrome ============ */}
       {focus && (
         <>
           <button
@@ -866,7 +1229,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
             <X size={18} />
           </button>
           <div className="pointer-events-none fixed bottom-7 left-6 z-40 hidden text-xs font-medium text-ink/40 md:block">
-            {nameOf(current.s)} {current.s}:{current.n}
+            {nameOf(current?.s)} {current?.s}:{current?.n}
           </div>
         </>
       )}

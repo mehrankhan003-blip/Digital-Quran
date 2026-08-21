@@ -6,9 +6,11 @@ const KEY = {
   autoscroll: "noor-autoscroll",
   focus: "noor-focus",
   recite: "noor-recite",
+  urduRecite: "noor-urdu-recite",
   khatmahMode: "noor-khatmah-mode",
   khatmahPages: "noor-khatmah-pages",
   khatmahTarget: "noor-khatmah-target",
+  khatmahStart: "noor-khatmah-start",
 } as const;
 
 export type PrefKey = keyof typeof KEY;

@@ -149,6 +149,30 @@ button, input, select, textarea { font: inherit; }
   animation: urdu-speak 1.8s ease-in-out infinite;
 }
 
+/* ---- word-by-word recitation highlight (Arabic + Urdu) ---- */
+.wbw-word {
+  border-radius: 0.375rem;
+  padding: 0 0.1em;
+  transition: color 0.25s ease, background-color 0.25s ease, box-shadow 0.25s ease;
+}
+.wbw-word-active {
+  color: rgb(var(--gold));
+  background: rgb(var(--gold) / 0.14);
+  box-shadow: 0 0 0 1px rgb(var(--gold) / 0.25);
+}
+.wbw-card-active {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* ---- player sheet slide-up ---- */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+.player-sheet {
+  animation: sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes eq-bounce {
   0%, 100% { transform: scaleY(0.35); }
   50% { transform: scaleY(1); }
@@ -198,11 +222,12 @@ button, input, select, textarea { font: inherit; }
 }
 
 @media (max-width: 767px) {
-  body { padding-bottom: 5rem; }
+  /* bottom nav (~3.9rem) + mini player (~4.6rem) + breathing room */
+  body { padding-bottom: 9.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  .ayah-active, .urdu-speaking, .fade-up, .fade-in, .scale-in, .slide-down { animation: none !important; }
+  .ayah-active, .urdu-speaking, .fade-up, .fade-in, .scale-in, .slide-down, .player-sheet { animation: none !important; }
 }

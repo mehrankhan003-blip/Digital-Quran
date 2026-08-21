@@ -49,7 +49,7 @@ export default async function SurahPage({ params }: { params: Promise<{ surah: s
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-5 py-10 md:px-8">
+    <main className="mx-auto max-w-4xl px-3 py-6 sm:px-5 md:px-8 md:py-10">
       <SurahReader
         surah={surahMeta}
         ayahs={ayahs}

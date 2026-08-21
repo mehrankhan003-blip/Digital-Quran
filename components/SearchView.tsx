@@ -59,7 +59,7 @@ export function SearchView({ query: initialQuery, results }: SearchViewProps) {
               <span className="text-gold">Read →</span>
             </div>
             <p className="quran-arabic mt-3 text-right text-2xl leading-[2] text-ink">{r.arabic}</p>
-            <p className="mt-3 text-right leading-7 text-ink/70" dir="rtl">{r.urdu}</p>
+            <p className="urdu-text mt-3 text-right text-[15px] leading-[2.4] text-ink/70" dir="rtl">{r.urdu}</p>
             <p className="mt-2 text-sm leading-6 text-ink/55">{r.english}</p>
           </Link>
         ))}

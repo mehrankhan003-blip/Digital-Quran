@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,6 +7,7 @@
 :root {
   --font-inter: "Inter";
   --font-amiri: "Amiri";
+  --font-urdu: "Noto Nastaliq Urdu";
   --ink: 23 24 21;
   --ivory: 248 245 237;
   --forest: 23 63 53;
@@ -32,6 +33,7 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+html, body { overflow-x: clip; }
 body {
   margin: 0;
   background: rgb(var(--ivory));
@@ -64,6 +66,13 @@ button, input, select, textarea { font: inherit; }
   font-family: var(--font-amiri), serif;
   line-height: 2.25;
   direction: rtl;
+}
+
+/* Urdu Nastaliq — needs generous line-height for its tall glyphs */
+.urdu-text {
+  font-family: var(--font-urdu), var(--font-amiri), serif;
+  direction: rtl;
+  line-height: 2.4;
 }
 
 .glass {

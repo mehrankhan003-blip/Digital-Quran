@@ -222,7 +222,7 @@ function AnswerCard({ answer }: { answer: Answer }) {
                     <div className="quran-arabic mt-2 text-lg leading-9 text-ink/85">
                       {r.arabic}
                     </div>
-                    <p className="mt-2 text-xs leading-6 text-ink/55" dir="rtl">
+                    <p className="urdu-text mt-2 text-[13px] leading-[2.2] text-ink/55" dir="rtl">
                       {r.urdu}
                     </p>
                   </Link>

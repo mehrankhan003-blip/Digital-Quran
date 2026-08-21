@@ -237,9 +237,15 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
     if (a) addHistory({ s: a.s, n: a.n, surahName: nameOf(a.s) });
   };
 
-  const playFrom = (i: number) => {
+  /** Move to an ayah and always restart the pipeline from the Arabic part. */
+  const jumpTo = (i: number) => {
     setAudioError("");
+    setPhase("arabic");
     setIndex(i);
+  };
+
+  const playFrom = (i: number) => {
+    jumpTo(i);
     setPlaying(true);
     recordHistory(i);
   };
@@ -324,12 +330,14 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
     const i = indexRef.current;
     if (i >= countRef.current - 1) {
       if (repeatModeRef.current === "section") {
+        setPhase("arabic");
         setIndex(0);
       } else {
         setPlaying(false);
       }
       return;
     }
+    setPhase("arabic");
     setIndex(i + 1);
   }, []);
 
@@ -469,12 +477,14 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
       });
       navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
       navigator.mediaSession.setActionHandler("pause", () => setPlaying(false));
-      navigator.mediaSession.setActionHandler("previoustrack", () =>
-        setIndex((i) => Math.max(0, i - 1))
-      );
-      navigator.mediaSession.setActionHandler("nexttrack", () =>
-        setIndex((i) => Math.min(countRef.current - 1, i + 1))
-      );
+      navigator.mediaSession.setActionHandler("previoustrack", () => {
+        setPhase("arabic");
+        setIndex((i) => Math.max(0, i - 1));
+      });
+      navigator.mediaSession.setActionHandler("nexttrack", () => {
+        setPhase("arabic");
+        setIndex((i) => Math.min(countRef.current - 1, i + 1));
+      });
     } catch {
       // media session unsupported — ignore
     }
@@ -709,7 +719,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
       <audio ref={urduRef} preload="auto" />
 
       {resumed && !focus && current && (
-        <div className="fade-up fixed left-1/2 top-20 z-50 -translate-x-1/2 whitespace-nowrap rounded-full border border-gold/40 bg-surface px-4 py-2 text-xs font-medium text-forest shadow-soft">
+        <div className="fade-up fixed left-1/2 top-20 z-50 max-w-[92vw] -translate-x-1/2 truncate rounded-full border border-gold/40 bg-surface px-4 py-2 text-xs font-medium text-forest shadow-soft">
           Resumed · Ayah {current.n} {nameOf(current.s)}
         </div>
       )}
@@ -727,12 +737,12 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
           return (
             <div key={`${a.s}-${a.n}`}>
               {newSurah && info && !focus && (
-                <div className="sticky top-[4.4rem] z-30 flex items-center justify-between rounded-2xl border border-ink/10 bg-surface/90 px-4 py-2 shadow-sm backdrop-blur md:top-20">
-                  <span className="text-sm font-semibold">
+                <div className="sticky top-[4.4rem] z-30 flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-surface/90 px-4 py-2 shadow-sm backdrop-blur md:top-20">
+                  <span className="min-w-0 truncate text-sm font-semibold">
                     {info.english}{" "}
                     <span className="text-ink/40">· {info.ayahs} Ayahs</span>
                   </span>
-                  <span className="quran-arabic text-lg text-forest">{info.arabic}</span>
+                  <span className="quran-arabic shrink-0 text-lg text-forest">{info.arabic}</span>
                 </div>
               )}
               <article
@@ -745,20 +755,22 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span
-                    className={`relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                      active
-                        ? "bg-gradient-to-br from-forest to-forest/80 text-white shadow-card"
-                        : "bg-ivory text-forest"
-                    }`}
-                  >
-                    {a.n}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                        active
+                          ? "bg-gradient-to-br from-forest to-forest/80 text-white shadow-card"
+                          : "bg-ivory text-forest"
+                      }`}
+                    >
+                      {a.n}
+                    </span>
                     {active && (
-                      <span className="eq absolute -right-2.5 -top-1.5 text-gold" aria-hidden>
+                      <span className="eq text-gold" aria-hidden>
                         <span /><span /><span /><span />
                       </span>
                     )}
-                  </span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {a.sajdah && (
                       <span className="text-xs text-gold" title="Sajdah (prostration)">
@@ -844,7 +856,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                         )}
                       </div>
                       <p
-                        className="text-right text-base leading-8 text-ink/80 md:text-lg"
+                        className="urdu-text text-right text-[15px] leading-[2.4] text-ink/80 md:text-lg"
                         dir="rtl"
                       >
                         {renderUrduText(a, i)}
@@ -933,7 +945,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIndex(Math.max(0, index - 1));
+                  jumpTo(Math.max(0, index - 1));
                 }}
                 disabled={index <= 0}
                 className="hidden rounded-xl p-2 text-ink/55 transition hover:bg-surface disabled:opacity-30 sm:block"
@@ -944,7 +956,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIndex(Math.min(count - 1, index + 1));
+                  jumpTo(Math.min(count - 1, index + 1));
                 }}
                 disabled={index >= count - 1}
                 className="hidden rounded-xl p-2 text-ink/55 transition hover:bg-surface disabled:opacity-30 sm:block"
@@ -1014,7 +1026,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
             {/* transport */}
             <div className="mt-5 flex items-center justify-center gap-5">
               <button
-                onClick={() => setIndex(Math.max(0, index - 1))}
+                onClick={() => jumpTo(Math.max(0, index - 1))}
                 disabled={index <= 0}
                 className="rounded-full bg-ivory p-3.5 text-ink/70 transition hover:bg-mist disabled:opacity-30"
                 aria-label="Previous ayah"
@@ -1033,7 +1045,7 @@ export function Reader({ items, heading, footerNav, groupInfo, words, hasRoman =
                 {playing ? <Pause size={26} /> : <Play size={26} className="translate-x-[2px]" />}
               </button>
               <button
-                onClick={() => setIndex(Math.min(count - 1, index + 1))}
+                onClick={() => jumpTo(Math.min(count - 1, index + 1))}
                 disabled={index >= count - 1}
                 className="rounded-full bg-ivory p-3.5 text-ink/70 transition hover:bg-mist disabled:opacity-30"
                 aria-label="Next ayah"
